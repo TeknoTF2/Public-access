@@ -157,6 +157,21 @@ function showLibTab(name) {
   document.getElementById('lib-'+name).classList.add('active');
 }
 </script>
+<script>
+/* Records this site in the gateway's bookmarks list. */
+(function(){
+  try {
+    var KEY = 'arg_bookmarks_v1', slug = 'library';
+    var list = [];
+    try { list = JSON.parse(localStorage.getItem(KEY)) || []; } catch(e) {}
+    if (!Array.isArray(list)) list = [];
+    list = list.filter(function(s){ return typeof s === 'string' && s !== slug; });
+    list.unshift(slug);
+    if (list.length > 20) list = list.slice(0, 20);
+    localStorage.setItem(KEY, JSON.stringify(list));
+  } catch(e) {}
+})();
+</script>
 </head>
 <body>
 

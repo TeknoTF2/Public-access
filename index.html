@@ -175,6 +175,33 @@ form { margin: 0; }
 .no-results .quoted { color: #c41200; font-weight: bold; }
 .suggest { margin-top: 10px; }
 .suggest a { font-style: italic; }
+
+/* Bookmarks bar — shown only when at least one site has been visited.
+   Styled like a 2004-era browser bookmarks toolbar / Google personalized strip. */
+#bookmarks-bar {
+  display: none;
+  background: linear-gradient(to bottom, #fffbe2, #fff1b8);
+  border-bottom: 1px solid #d8c66a;
+  padding: 4px 12px;
+  font-size: 11px;
+  color: #444;
+}
+#bookmarks-bar .bm-label {
+  font-weight: bold;
+  color: #806000;
+  margin-right: 8px;
+}
+#bookmarks-bar .bm-label .star { color: #c89000; margin-right: 2px; }
+#bookmarks-bar a.bm-link {
+  color: #0000cc;
+  margin-right: 12px;
+  white-space: nowrap;
+}
+#bookmarks-bar a.bm-clear {
+  float: right;
+  color: #806000;
+  font-size: 10px;
+}
 </style>
 <script>
 // All sites the search index knows about. The slug must match the .html filename.
@@ -184,6 +211,7 @@ form { margin: 0; }
 var SITES = [
   {
     slug: 'deeplakoregon',
+    display: 'Deep Lake, Oregon',
     title: 'Welcome to Deep Lake, Oregon - Official City Website',
     url:   'www.deeplakoregon.com',
     snippet: 'The official city website of Deep Lake, Oregon. Population, mayor, parks, town hall hours, community announcements and visitor information.',
@@ -191,6 +219,7 @@ var SITES = [
   },
   {
     slug: 'tvodysseyfans',
+    display: 'TV Odyssey Fans',
     title: 'TV Odyssey Fans :: Index',
     url:   'www.tvodysseyfans.net',
     snippet: 'Fan forum for the lost public-access show TV Odyssey out of Deep Lake, Oregon. Episode discussion, tape trading, show identification. "Remember What They Don\'t Want You To."',
@@ -198,6 +227,7 @@ var SITES = [
   },
   {
     slug: 'findthelight',
+    display: 'Find The Light',
     title: "FIND THE LIGHT — Deep Lake Oregon: What They Don't Want You To Know",
     url:   'www.findthelight.org',
     snippet: 'Independent research into Deep Lake, the WDLK broadcast tower, and the disappearances. Photos, scanned documents, and witness reports.',
@@ -205,6 +235,7 @@ var SITES = [
   },
   {
     slug: 'propertyrecords',
+    display: 'Oregon Property Records',
     title: 'Oregon Property Records — Public Access Database',
     url:   'records.oregon.gov/property',
     snippet: 'Search Oregon county property records. Parcel ownership, deed transfers, tax assessment history. Public access database maintained by the State of Oregon.',
@@ -212,6 +243,7 @@ var SITES = [
   },
   {
     slug: 'library',
+    display: 'Deep Lake Public Library',
     title: 'Deep Lake Public Library',
     url:   'www.deeplakelibrary.org',
     snippet: 'Hours, catalog, and local history archive for the Deep Lake Public Library. Microfilm of the Klamath Herald, town newspaper clippings, and reading programs.',
@@ -219,6 +251,7 @@ var SITES = [
   },
   {
     slug: 'jakes-page',
+    display: "Jake's Deep Lake Page",
     title: "~*~ Jake's Deep Lake Page ~*~",
     url:   'www.geocities.com/Heartland/Meadows/4412/',
     snippet: "Hi I'm Jake! This is my homepage about Deep Lake. Skateboarding, my dog Buster, and weird stuff I've seen around town. Sign my guestbook!",
@@ -226,6 +259,7 @@ var SITES = [
   },
   {
     slug: 'wdlk-tv',
+    display: 'WDLK-TV',
     title: 'WDLK-TV — TV Odyssey — Deep Lake, Oregon',
     url:   'www.wdlk-tv.com',
     snippet: 'Official station page for WDLK-TV, broadcasting "TV Odyssey" and other community programming to the Deep Lake area on UHF 47.',
@@ -304,10 +338,73 @@ function renderResults() {
   document.getElementById('results-body').innerHTML = html;
 }
 
-window.onload = renderResults;
+var BOOKMARKS_KEY = 'arg_bookmarks_v1';
+
+function loadBookmarks() {
+  try {
+    var raw = localStorage.getItem(BOOKMARKS_KEY);
+    if (!raw) return [];
+    var list = JSON.parse(raw);
+    if (!Array.isArray(list)) return [];
+    return list.filter(function(s){ return typeof s === 'string'; });
+  } catch (e) { return []; }
+}
+
+function siteBySlug(slug) {
+  for (var i = 0; i < SITES.length; i++) {
+    if (SITES[i].slug === slug) return SITES[i];
+  }
+  return null;
+}
+
+function clearBookmarks(e) {
+  if (e) e.preventDefault();
+  try { localStorage.removeItem(BOOKMARKS_KEY); } catch (err) {}
+  renderBookmarks();
+  return false;
+}
+
+function renderBookmarks() {
+  var bar = document.getElementById('bookmarks-bar');
+  var listEl = document.getElementById('bookmarks-list');
+  if (!bar || !listEl) return;
+  var slugs = loadBookmarks();
+  // Resolve to known sites; drop anything we don't have an entry for.
+  var items = [];
+  for (var i = 0; i < slugs.length; i++) {
+    var s = siteBySlug(slugs[i]);
+    if (s) items.push(s);
+  }
+  if (items.length === 0) {
+    bar.style.display = 'none';
+    return;
+  }
+  var html = '';
+  for (var k = 0; k < items.length; k++) {
+    var it = items[k];
+    var label = htmlEscape(it.display || it.title || it.slug);
+    html += '<a class="bm-link" href="' + encodeURIComponent(it.slug) + '.html">' + label + '</a>';
+  }
+  listEl.innerHTML = html;
+  bar.style.display = 'block';
+}
+
+function init() {
+  renderBookmarks();
+  renderResults();
+}
+
+window.onload = init;
 </script>
 </head>
 <body>
+
+<!-- Bookmarks bar (saved sites). Hidden until at least one site has been visited. -->
+<div id="bookmarks-bar">
+  <a class="bm-clear" href="#" onclick="return clearBookmarks(event);" title="Remove all bookmarks">clear</a>
+  <span class="bm-label"><span class="star">&#9733;</span>Bookmarks</span>
+  <span id="bookmarks-list"></span>
+</div>
 
 <!-- HOME VIEW -->
 <div id="home">
