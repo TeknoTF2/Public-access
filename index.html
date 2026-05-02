@@ -264,6 +264,31 @@ var SITES = [
     url:   'www.wdlk-tv.com',
     snippet: 'Official station page for WDLK-TV, broadcasting "TV Odyssey" and other community programming to the Deep Lake area on UHF 47.',
     keys: ['wdlktv', 'wdlk', 'wdlktvcom', 'wdlktelevision', 'wdlkstation', 'wdlktvdeeplake', 'wdlktvodyssey']
+  },
+
+  /* ----------------------------------------------------------------
+     HIDDEN / IP-ONLY SITES
+     These never appear in search results or "did you mean" suggestions.
+     They resolve only when the player types the exact in-universe LAN
+     IP into the gateway. See README.md for the GM index.
+     ---------------------------------------------------------------- */
+  {
+    slug: 'ccsb-internal',
+    display: '192.168.4.27',
+    title: 'CCSB — Internal Account Management System',
+    url:   '192.168.4.27',
+    snippet: '',
+    hidden: true,
+    keys: ['192168427']
+  },
+  {
+    slug: 'wdlk-terminal',
+    display: '10.0.14.182',
+    title: 'WDLK-SYS',
+    url:   '10.0.14.182',
+    snippet: '',
+    hidden: true,
+    keys: ['10014182']
   }
 ];
 
@@ -276,7 +301,10 @@ function findSite(query) {
   if (!n) return null;
   for (var i = 0; i < SITES.length; i++) {
     var s = SITES[i];
-    if (normalize(s.slug) === n) return s;
+    // Hidden sites only resolve through their explicit keys (their LAN IP),
+    // never through their slug. That way a player can't reach an IP-only
+    // page by guessing its filename.
+    if (!s.hidden && normalize(s.slug) === n) return s;
     for (var j = 0; j < s.keys.length; j++) {
       if (normalize(s.keys[j]) === n) return s;
     }
