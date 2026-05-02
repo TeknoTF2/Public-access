@@ -59,7 +59,7 @@ type that exact IP into the gateway.
 
 | File                    | In-universe identity              | Gateway IP (player must type) | Hook                                                                                |
 | ----------------------- | --------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------- |
-| `ccsb-internal.html`    | CCSB Internal Account Management  | **`192.168.4.27`**            | Local-bank intranet. Account history, audit log, flagged accounts (R. Calloway, Lakeview Holdings, Mountain Creamery, D. Rourke, H. Wentworth, 847 Lakeshore Mortgage). Admin contact `d.rourke@ccsb.local`. |
+| `ccsb-internal.html`    | CCSB Internal Account Management  | **`192.168.4.27`**            | Local-bank intranet. Gated by an employee-login screen (username `Dale Rourke`, PIN `1984` — his WDLK Tech Director hire year, learnable from `wdlk-tv.html#staff`). Account history, audit log, flagged accounts (R. Calloway, Lakeview Holdings, Mountain Creamery, D. Rourke, H. Wentworth, 847 Lakeshore Mortgage). Admin contact `d.rourke@ccsb.local`. |
 | `wdlk-terminal.html`    | WDLK-SYS terminal                 | **`10.0.14.182`**             | Boot screen → login → desktop with error dialog, notepad, taskbar, then "Access Granted" screen. The deepest layer of the WDLK rabbit hole. |
 
 Variations of these IPs that would also resolve (because of the

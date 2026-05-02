@@ -516,6 +516,17 @@ other on session 4. Pick a ruling per table; record it.
 - **Hidden WDLK-TV staff page**: visit `wdlk-tv.html#staff` or
   `wdlk-tv.html?page=staff`. Also reachable from the schedule's
   Friday-midnight `S/T-7` cell.
+- **CCSB intranet login** (`192.168.4.27` / `ccsb-internal.html`):
+  - Username: `Dale Rourke` (case-insensitive, full name from the
+    WDLK staff page)
+  - PIN: `1984` (his WDLK Technical Director hire year, from the
+    same staff page)
+  - Three failed attempts → 5-second lockout and reset.
+  - Successful auth is cached in `sessionStorage` (`ccsb_authed_v1`)
+    for the duration of the tab. Closing the tab requires re-auth.
+  - **Player path:** the only place to discover both halves of the
+    credential is the hidden `wdlk-tv.html#staff` page, so the
+    intended order is WDLK-TV → staff page → CCSB intranet.
 - **The deployed static server (`server.js`) blocks all `.md`
   files**, including this document and the `README.md` index, so
   you can deploy the bundle to Railway / any static host without

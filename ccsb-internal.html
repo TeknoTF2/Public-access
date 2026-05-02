@@ -273,7 +273,62 @@ function showBankTab(name) {
 </head>
 <body>
 
-<div class="app-frame">
+<!-- ===== LOGIN GATE =====
+     Players must authenticate as the branch manager before the
+     intranet is shown. Credentials are seeded in-fiction:
+       USERNAME: Dale Rourke (case-insensitive, full name on the
+                 staff page at wdlk-tv.html#staff)
+       PIN:      1984 (his WDLK Technical Director hire year, on
+                 the same staff page)
+-->
+<div id="ccsb-login-screen" style="background-color:#5a7a99; min-height:100vh; padding:0; margin:0; font-family:Tahoma,'MS Sans Serif',Arial,sans-serif;">
+  <div style="text-align:center; padding-top:60px;">
+    <div style="display:inline-block; background:linear-gradient(to right,#0a246a,#3a6ea5); color:#fff; padding:8px 24px; font-size:14px; font-weight:bold; letter-spacing:2px;">
+      CASCADE COUNTY SAVINGS BANK
+    </div>
+    <div style="font-size:11px; color:#dde6ee; margin-top:6px; letter-spacing:1px;">
+      Internal Account Management System &mdash; v3.2
+    </div>
+  </div>
+
+  <div class="login-overlay" style="margin:30px auto;">
+    <h3>Employee Sign In</h3>
+    <p style="font-size:10px; color:#666; margin-bottom:10px; line-height:1.4;">
+      Authorized CCSB personnel only. All sign-in attempts and
+      session activity are logged. Unauthorized access is prohibited
+      under federal law (18 U.S.C. &sect; 1030).
+    </p>
+
+    <div id="ccsb-login-error" style="display:none; background-color:#ffe0e0; border:1px solid #cc6666; padding:5px 7px; margin-bottom:8px; color:#660000; font-size:10px;"></div>
+
+    <form id="ccsb-login-form" autocomplete="off" onsubmit="return ccsbLogin(event);">
+      <table cellpadding="3" cellspacing="0" style="margin:0 auto;">
+        <tr>
+          <td style="font-size:11px; text-align:right;">Employee Name:</td>
+          <td><input type="text" id="ccsb-user" autocomplete="off" spellcheck="false"></td>
+        </tr>
+        <tr>
+          <td style="font-size:11px; text-align:right;">PIN:</td>
+          <td><input type="password" id="ccsb-pin" maxlength="8" autocomplete="off"></td>
+        </tr>
+      </table>
+      <div style="margin-top:14px; text-align:center;">
+        <input type="submit" value="Sign In">
+      </div>
+    </form>
+
+    <div style="margin-top:14px; font-size:9px; color:#888; border-top:1px solid #ccc; padding-top:6px; text-align:center;">
+      CCSB-AMS v3.2 &bull; Branch: <b>DEEP LAKE</b><br>
+      Forgot your PIN? Contact the branch manager.
+    </div>
+  </div>
+
+  <div style="text-align:center; font-size:9px; color:#bcc8d4; margin-top:40px;">
+    &copy; 2001 Cascade County Savings Bank &bull; Confidential &mdash; Internal Use Only
+  </div>
+</div>
+
+<div class="app-frame" id="ccsb-app" style="display:none;">
 
 <!-- TITLE BAR -->
 <div class="title-bar">
@@ -820,6 +875,84 @@ function showBankTab(name) {
 </div>
 
 </div><!-- app-frame -->
+
+<script>
+/* CCSB intranet login gate.
+   Username (case-insensitive, whitespace-collapsed): "dale rourke"
+   PIN: "1984"  (his WDLK Tech Director hire year — staff page)
+   Three failed attempts trigger a 5-second lockout.
+   Successful auth is cached in sessionStorage so tab navigation
+   inside the app does not require re-login. */
+(function(){
+  var KEY = 'ccsb_authed_v1';
+  var login = document.getElementById('ccsb-login-screen');
+  var app = document.getElementById('ccsb-app');
+  var err = document.getElementById('ccsb-login-error');
+  var userField = document.getElementById('ccsb-user');
+  var pinField = document.getElementById('ccsb-pin');
+  var attempts = 0;
+
+  function showApp() {
+    login.style.display = 'none';
+    app.style.display = '';
+    try { sessionStorage.setItem(KEY, '1'); } catch(e) {}
+  }
+
+  function showError(msg) {
+    err.textContent = msg;
+    err.style.display = '';
+  }
+
+  function clearError() {
+    err.style.display = 'none';
+  }
+
+  // Restore prior session within this tab.
+  try {
+    if (sessionStorage.getItem(KEY) === '1') {
+      showApp();
+      return;
+    }
+  } catch(e) {}
+
+  window.ccsbLogin = function(e) {
+    if (e && e.preventDefault) e.preventDefault();
+
+    var user = userField.value.trim().toLowerCase().replace(/\s+/g, ' ');
+    var pin = pinField.value.trim();
+
+    if (user === 'dale rourke' && pin === '1984') {
+      clearError();
+      showApp();
+      return false;
+    }
+
+    attempts++;
+    pinField.value = '';
+    if (attempts >= 3) {
+      showError('Account temporarily locked. Too many failed sign-in attempts. Please wait and try again.');
+      userField.disabled = true;
+      pinField.disabled = true;
+      setTimeout(function(){
+        attempts = 0;
+        userField.disabled = false;
+        pinField.disabled = false;
+        userField.value = '';
+        pinField.value = '';
+        clearError();
+        userField.focus();
+      }, 5000);
+    } else {
+      showError('Sign-in failed. Verify employee name and PIN. (' + attempts + '/3)');
+      pinField.focus();
+    }
+    return false;
+  };
+
+  // Focus the username field on first load.
+  if (userField) userField.focus();
+})();
+</script>
 
 </body>
 </html>
