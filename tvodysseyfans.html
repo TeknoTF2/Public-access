@@ -156,8 +156,10 @@ function showTab(tabName) {
   document.querySelectorAll('.tab-content').forEach(function(t) { t.classList.remove('active'); });
   document.querySelector('[data-tab="'+tabName+'"]').classList.add('active');
   document.getElementById('content-'+tabName).classList.add('active');
-  // hide any open thread views
+  // reset thread view: hide any open thread, restore the recent-threads list
   document.querySelectorAll('.thread-view').forEach(function(t) { t.style.display = 'none'; });
+  var tl = document.getElementById('thread-list');
+  if (tl) tl.style.display = 'block';
 }
 function showThread(threadId) {
   document.querySelectorAll('.thread-view').forEach(function(t) { t.style.display = 'none'; });
