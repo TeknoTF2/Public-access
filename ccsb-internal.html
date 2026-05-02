@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<title>CCSB — Internal Account Management System v3.2</title>
+<!-- CCSB Intranet — Authorized Personnel Only -->
+<!-- Server: CCSB-MAIN-01 / Last deploy: 09/14/2003 -->
+<!-- Admin contact: d.rourke@ccsb.local -->
+<style>
+body {
+  background-color: #c0c0c0;
+  font-family: Tahoma, 'MS Sans Serif', Arial, sans-serif;
+  font-size: 11px;
+  color: #000;
+  margin: 0;
+  padding: 0;
+}
+a { color: #0000cc; font-size: 11px; }
+a:hover { color: #cc0000; }
+
+.app-frame {
+  width: 800px;
+  margin: 8px auto;
+  border: 2px outset #dfdfdf;
+  background-color: #ece9d8;
+}
+.title-bar {
+  background: linear-gradient(to right, #0a246a, #3a6ea5);
+  color: #fff;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 3px 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.title-bar-buttons span {
+  display: inline-block;
+  width: 16px;
+  height: 14px;
+  background-color: #c0c0c0;
+  border: 1px outset #dfdfdf;
+  text-align: center;
+  font-size: 9px;
+  line-height: 14px;
+  margin-left: 2px;
+  cursor: default;
+}
+.menu-bar {
+  background-color: #ece9d8;
+  border-bottom: 1px solid #999;
+  padding: 2px 4px;
+  font-size: 11px;
+}
+.menu-bar span {
+  margin-right: 12px;
+  cursor: default;
+}
+.menu-bar span:hover { background-color: #316ac5; color: #fff; padding: 0 3px; }
+.toolbar {
+  background-color: #ece9d8;
+  border-bottom: 1px solid #bbb;
+  padding: 3px 6px;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.toolbar button {
+  font-family: Tahoma, sans-serif;
+  font-size: 10px;
+  background-color: #ece9d8;
+  border: 1px outset #dfdfdf;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.toolbar button:active {
+  border: 1px inset #999;
+}
+.status-bar {
+  background-color: #ece9d8;
+  border-top: 1px solid #999;
+  padding: 2px 6px;
+  font-size: 10px;
+  color: #444;
+  display: flex;
+  justify-content: space-between;
+}
+.main-area {
+  display: flex;
+  min-height: 500px;
+}
+.sidebar {
+  width: 170px;
+  background-color: #d6d2c2;
+  border-right: 1px solid #999;
+  padding: 0;
+}
+.sidebar-header {
+  background-color: #7a96b8;
+  color: #fff;
+  font-weight: bold;
+  font-size: 10px;
+  padding: 3px 6px;
+  letter-spacing: 0.5px;
+}
+.sidebar a {
+  display: block;
+  padding: 3px 8px;
+  font-size: 10px;
+  text-decoration: none;
+  color: #000;
+  border-bottom: 1px solid #c8c4b4;
+}
+.sidebar a:hover {
+  background-color: #316ac5;
+  color: #fff;
+}
+.sidebar a.active {
+  background-color: #fff;
+  font-weight: bold;
+}
+.content {
+  flex: 1;
+  background-color: #fff;
+  padding: 0;
+  overflow: auto;
+}
+.content-header {
+  background-color: #f0ede1;
+  border-bottom: 1px solid #ccc;
+  padding: 6px 10px;
+  font-weight: bold;
+  font-size: 12px;
+  color: #333;
+}
+.content-body {
+  padding: 10px;
+}
+table.data {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+table.data th {
+  background-color: #d6d2c2;
+  border: 1px solid #999;
+  padding: 3px 6px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: bold;
+}
+table.data td {
+  border: 1px solid #ccc;
+  padding: 3px 6px;
+}
+table.data tr:hover { background-color: #e8e4d8; }
+.acct-detail {
+  border: 1px solid #999;
+  background-color: #f8f6f0;
+  padding: 8px;
+  margin: 8px 0;
+}
+.acct-detail table {
+  font-size: 11px;
+  border-collapse: collapse;
+}
+.acct-detail table td {
+  padding: 2px 8px 2px 0;
+  vertical-align: top;
+}
+.acct-detail .label {
+  font-weight: bold;
+  color: #333;
+  width: 140px;
+}
+.flag-notice {
+  background-color: #ffffcc;
+  border: 1px solid #cccc66;
+  padding: 6px 8px;
+  font-size: 10px;
+  margin: 6px 0;
+  color: #666600;
+}
+.flag-alert {
+  background-color: #ffcccc;
+  border: 1px solid #cc6666;
+  padding: 6px 8px;
+  font-size: 10px;
+  margin: 6px 0;
+  color: #660000;
+}
+.login-overlay {
+  background-color: #ece9d8;
+  border: 2px outset #dfdfdf;
+  padding: 20px;
+  width: 320px;
+  margin: 40px auto;
+}
+.login-overlay h3 {
+  margin: 0 0 10px 0;
+  font-size: 12px;
+  color: #0a246a;
+}
+.login-overlay input[type="text"],
+.login-overlay input[type="password"] {
+  font-size: 11px;
+  border: 1px inset #999;
+  padding: 2px 4px;
+  width: 200px;
+  background-color: #fff;
+}
+.login-overlay input[type="submit"] {
+  font-size: 11px;
+  background-color: #ece9d8;
+  border: 2px outset #dfdfdf;
+  padding: 2px 16px;
+  cursor: pointer;
+}
+.login-overlay input[type="submit"]:active {
+  border: 2px inset #999;
+}
+.tab-row { display: flex; gap: 0; }
+.bank-tab {
+  padding: 3px 10px;
+  background-color: #d6d2c2;
+  border: 1px solid #999;
+  border-bottom: none;
+  cursor: pointer;
+  font-family: Tahoma, sans-serif;
+  font-size: 10px;
+  margin-right: -1px;
+}
+.bank-tab.active { background-color: #fff; font-weight: bold; position: relative; z-index: 1; }
+.bank-tab:hover { background-color: #e8e4d8; }
+.bank-content { display: none; border: 1px solid #999; border-top: none; padding: 10px; background-color: #fff; }
+.bank-content.active { display: block; }
+.restricted {
+  color: #cc0000;
+  font-size: 9px;
+  font-weight: bold;
+}
+.audit-entry {
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  line-height: 1.6;
+  color: #333;
+}
+</style>
+<script>
+function showBankTab(name) {
+  document.querySelectorAll('.bank-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.bank-content').forEach(t => t.classList.remove('active'));
+  document.querySelector('[data-btab="'+name+'"]').classList.add('active');
+  document.getElementById('bt-'+name).classList.add('active');
+}
+</script>
+</head>
+<body>
+
+<div class="app-frame">
+
+<!-- TITLE BAR -->
+<div class="title-bar">
+  <span>CCSB Account Management System — [DEEP LAKE BRANCH] — Logged in: D.ROURKE</span>
+  <div class="title-bar-buttons">
+    <span>_</span><span>&#9633;</span><span>X</span>
+  </div>
+</div>
+
+<!-- MENU BAR -->
+<div class="menu-bar">
+  <span>File</span>
+  <span>Edit</span>
+  <span>View</span>
+  <span>Accounts</span>
+  <span>Reports</span>
+  <span>Admin</span>
+  <span>Help</span>
+</div>
+
+<!-- TOOLBAR -->
+<div class="toolbar">
+  <button>New Search</button>
+  <button>Print</button>
+  <button>Export</button>
+  <span style="color:#999;">|</span>
+  <button>Refresh</button>
+  <span style="flex:1;"></span>
+  <span style="font-size:10px; color:#666;">Session: 04:12:38 &bull; DB: CCSB_PROD_01</span>
+</div>
+
+<!-- MAIN AREA -->
+<div class="main-area">
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="sidebar-header">NAVIGATION</div>
+  <a href="#" class="active" onclick="showBankTab('search');return false;">Account Search</a>
+  <a href="#" onclick="showBankTab('calloway');return false;">R. Calloway</a>
+  <a href="#" onclick="showBankTab('lakeview');return false;">Lakeview Holdings</a>
+  <a href="#" onclick="showBankTab('creamery');return false;">Mountain Creamery</a>
+  <a href="#" onclick="showBankTab('rourke');return false;">D. Rourke (Staff)</a>
+  <a href="#" onclick="showBankTab('wentworth');return false;">H. Wentworth</a>
+  <a href="#" onclick="showBankTab('847');return false;">847 Lakeshore Mtg</a>
+  <a href="#" onclick="showBankTab('audit');return false;">Audit Log</a>
+  <a href="#" onclick="showBankTab('flagged');return false;">Flagged Accounts</a>
+  <div class="sidebar-header" style="margin-top:10px;">ADMIN</div>
+  <a href="#" onclick="showBankTab('restricted');return false;">Restricted Files</a>
+  <a href="#" style="color:#999;">User Management</a>
+  <a href="#" style="color:#999;">System Config</a>
+  <a href="#" style="color:#999;">Backup Status</a>
+</div>
+
+<!-- CONTENT -->
+<div class="content">
+
+<!-- TAB SYSTEM -->
+<div style="padding: 6px 10px 0 10px;">
+<div class="tab-row">
+  <div class="bank-tab active" data-btab="search" onclick="showBankTab('search')">Search</div>
+  <div class="bank-tab" data-btab="calloway" onclick="showBankTab('calloway')">R. Calloway</div>
+  <div class="bank-tab" data-btab="lakeview" onclick="showBankTab('lakeview')">Lakeview Holdings</div>
+  <div class="bank-tab" data-btab="creamery" onclick="showBankTab('creamery')">Mountain Creamery</div>
+  <div class="bank-tab" data-btab="rourke" onclick="showBankTab('rourke')">D. Rourke</div>
+  <div class="bank-tab" data-btab="wentworth" onclick="showBankTab('wentworth')">H. Wentworth</div>
+  <div class="bank-tab" data-btab="847" onclick="showBankTab('847')">847 Lakeshore</div>
+  <div class="bank-tab" data-btab="audit" onclick="showBankTab('audit')">Audit</div>
+  <div class="bank-tab" data-btab="flagged" onclick="showBankTab('flagged')">Flagged</div>
+  <div class="bank-tab" data-btab="restricted" onclick="showBankTab('restricted')">Restricted</div>
+</div>
+</div>
+
+<!-- SEARCH TAB -->
+<div id="bt-search" class="bank-content active">
+<div class="content-header">Account Search Results — Query: "calloway" OR "lakeview" OR "WDLK"</div>
+<div class="content-body">
+
+<table class="data">
+<tr>
+  <th>Acct #</th>
+  <th>Name</th>
+  <th>Type</th>
+  <th>Status</th>
+  <th>Opened</th>
+  <th>Balance</th>
+  <th>Flags</th>
+</tr>
+<tr>
+  <td><a href="#" onclick="showBankTab('calloway');return false;">0018-7724</a></td>
+  <td>CALLOWAY, RAYMOND E.</td>
+  <td>Personal Checking</td>
+  <td style="color:green;">ACTIVE</td>
+  <td>03/12/1991</td>
+  <td>$847.33</td>
+  <td><span class="restricted">RESTRICTED</span></td>
+</tr>
+<tr>
+  <td><a href="#" onclick="showBankTab('calloway');return false;">0018-7725</a></td>
+  <td>CALLOWAY, RAYMOND E.</td>
+  <td>Personal Savings</td>
+  <td style="color:green;">ACTIVE</td>
+  <td>03/12/1991</td>
+  <td>$2,114.50</td>
+  <td><span class="restricted">RESTRICTED</span></td>
+</tr>
+<tr>
+  <td><a href="#" onclick="showBankTab('lakeview');return false;">0034-2001</a></td>
+  <td>LAKEVIEW HOLDINGS LLC</td>
+  <td>Commercial Checking</td>
+  <td style="color:green;">ACTIVE</td>
+  <td>06/01/1996</td>
+  <td style="color:#cc0000;">ACCESS DENIED</td>
+  <td><span class="restricted">LEVEL 3</span></td>
+</tr>
+<tr>
+  <td><a href="#" onclick="showBankTab('lakeview');return false;">0034-2002</a></td>
+  <td>LAKEVIEW HOLDINGS LLC</td>
+  <td>Commercial Trust</td>
+  <td style="color:green;">ACTIVE</td>
+  <td>06/01/1996</td>
+  <td style="color:#cc0000;">ACCESS DENIED</td>
+  <td><span class="restricted">LEVEL 3</span></td>
+</tr>
+<tr>
+  <td>0019-3340</td>
+  <td>WDLK BROADCASTING INC</td>
+  <td>Commercial Checking</td>
+  <td style="color:#999;">CLOSED</td>
+  <td>07/15/1983</td>
+  <td>$0.00</td>
+  <td></td>
+</tr>
+<tr>
+  <td>0019-3341</td>
+  <td>WDLK BROADCASTING INC</td>
+  <td>Commercial Payroll</td>
+  <td style="color:#999;">CLOSED</td>
+  <td>07/15/1983</td>
+  <td>$0.00</td>
+  <td></td>
+</tr>
+</table>
+
+<br>
+<span style="font-size:10px; color:#888;">6 results returned. Query time: 0.34s</span>
+</div>
+</div>
+
+<!-- R. CALLOWAY -->
+<div id="bt-calloway" class="bank-content">
+<div class="content-header">Customer Detail — CALLOWAY, RAYMOND E.</div>
+<div class="content-body">
+
+<div class="flag-notice">
+  &#9888; ACCOUNT NOTE (added 08/01/1996 by D.ROURKE): "Do not close accounts. Do not contact customer. Do not transfer to collections regardless of activity status. Standing order per branch management."
+</div>
+
+<div class="acct-detail">
+<table>
+<tr><td class="label">Full Name:</td><td>Raymond Eugene Calloway</td></tr>
+<tr><td class="label">SSN:</td><td>***-**-4178</td></tr>
+<tr><td class="label">Date of Birth:</td><td>11/03/1944</td></tr>
+<tr><td class="label">Address on File:</td><td>14200 Route 7, Deep Lake, OR 97701</td></tr>
+<tr><td class="label">Mailing Address:</td><td>P.O. Box 1147, Wilmington, DE 19801</td></tr>
+<tr><td class="label">Phone:</td><td>(541) 555-0199 [WDLK station number]</td></tr>
+<tr><td class="label">Employer:</td><td>WDLK Broadcasting Inc. / Lakeview Holdings LLC</td></tr>
+<tr><td class="label">Customer Since:</td><td>03/12/1991</td></tr>
+<tr><td class="label">ID Verification:</td><td>Oregon DL — <span style="color:#cc0000;">NOTE: DL# does not match DMV records per 2003 audit. See restricted file RF-0041.</span></td></tr>
+<tr><td class="label">Photo on File:</td><td>NO</td></tr>
+<tr><td class="label">Last In-Person Visit:</td><td>07/29/1996</td></tr>
+</table>
+</div>
+
+<b>Account #0018-7724 — Personal Checking</b>
+<table class="data" style="margin-top:4px;">
+<tr><th>Date</th><th>Description</th><th>Debit</th><th>Credit</th><th>Balance</th></tr>
+<tr><td>01/02/2004</td><td>TRANSFER FROM 0034-2001</td><td></td><td>$400.00</td><td>$847.33</td></tr>
+<tr><td>01/02/2003</td><td>TRANSFER FROM 0034-2001</td><td></td><td>$400.00</td><td>$447.33</td></tr>
+<tr><td>01/02/2002</td><td>TRANSFER FROM 0034-2001</td><td></td><td>$400.00</td><td>$47.33</td></tr>
+<tr><td>12/01/2001</td><td>CASCADE COUNTY UTILITIES — AUTO PAY</td><td>$187.44</td><td></td><td>-$352.67</td></tr>
+<tr><td>01/02/2001</td><td>TRANSFER FROM 0034-2001</td><td></td><td>$400.00</td><td>-$165.23</td></tr>
+<tr><td>12/01/2000</td><td>CASCADE COUNTY UTILITIES — AUTO PAY</td><td>$183.20</td><td></td><td>-$565.23</td></tr>
+<tr><td>01/02/2000</td><td>TRANSFER FROM 0034-2001</td><td></td><td>$400.00</td><td>-$382.03</td></tr>
+<tr><td colspan="5" style="color:#888; font-style:italic; text-align:center;">... 47 earlier transactions — scroll or export for full history ...</td></tr>
+<tr><td>03/12/1991</td><td>OPENING DEPOSIT — CASHIER'S CHECK</td><td></td><td>$10,000.00</td><td>$10,000.00</td></tr>
+</table>
+
+<div class="flag-notice" style="margin-top:8px;">
+  &#9888; PATTERN ALERT: Account receives exactly $400.00 on Jan 2 each year from Lakeview Holdings commercial account. Only other activity is auto-pay for utilities at 14200 Route 7. Customer has not visited branch or contacted bank since July 1996. Account went negative in 1998 but was not flagged per standing order from D.ROURKE.
+</div>
+
+</div>
+</div>
+
+<!-- LAKEVIEW HOLDINGS -->
+<div id="bt-lakeview" class="bank-content">
+<div class="content-header">Customer Detail — LAKEVIEW HOLDINGS LLC</div>
+<div class="content-body">
+
+<div class="flag-alert">
+  &#9888; ACCESS RESTRICTION: Balance and full transaction history for this account require Level 3 clearance. Current user (D.ROURKE) has Level 3 access. Displaying full records.
+</div>
+
+<div class="acct-detail">
+<table>
+<tr><td class="label">Entity Name:</td><td>Lakeview Holdings LLC</td></tr>
+<tr><td class="label">State of Incorporation:</td><td>Delaware</td></tr>
+<tr><td class="label">Registered Agent:</td><td>Capitol Services Inc., 1675 S. State St, Dover, DE 19901</td></tr>
+<tr><td class="label">Principal Officer:</td><td>R. Calloway (listed) — <span style="color:#cc0000;">NOTE: No signature card on file for any officer.</span></td></tr>
+<tr><td class="label">Business Address:</td><td>P.O. Box 1147, Wilmington, DE 19801</td></tr>
+<tr><td class="label">Local Address:</td><td>None</td></tr>
+<tr><td class="label">Phone:</td><td>None on file</td></tr>
+<tr><td class="label">Customer Since:</td><td>06/01/1996</td></tr>
+<tr><td class="label">Account Manager:</td><td>D. Rourke (Branch Manager, Deep Lake)</td></tr>
+</table>
+</div>
+
+<b>Account #0034-2001 — Commercial Checking</b>
+<div style="font-size:10px; color:#666; margin-bottom:4px;">Current Balance: $1,247,892.14</div>
+<table class="data">
+<tr><th>Date</th><th>Description</th><th>Debit</th><th>Credit</th><th>Balance</th></tr>
+<tr><td>01/15/2004</td><td>PROPERTY TAX — PARCEL 2847-0214-0300 (Station)</td><td>$2,904.00</td><td></td><td>$1,247,892.14</td></tr>
+<tr><td>01/02/2004</td><td>TRANSFER TO 0018-7724 (R. Calloway)</td><td>$400.00</td><td></td><td>$1,250,796.14</td></tr>
+<tr><td>01/02/2004</td><td>INCOMING WIRE — CAPITOL SERVICES INC</td><td></td><td>$50,000.00</td><td>$1,251,196.14</td></tr>
+<tr><td>12/15/2003</td><td>PAYMENT — PEMBROOK TECHNICAL SERVICES</td><td>$4,200.00</td><td></td><td>$1,201,196.14</td></tr>
+<tr><td>11/15/2003</td><td>PAYMENT — PEMBROOK TECHNICAL SERVICES</td><td>$4,200.00</td><td></td><td>$1,205,396.14</td></tr>
+<tr><td>10/15/2003</td><td>PAYMENT — PEMBROOK TECHNICAL SERVICES</td><td>$4,200.00</td><td></td><td>$1,209,596.14</td></tr>
+<tr><td>09/15/2003</td><td>PAYMENT — PEMBROOK TECHNICAL SERVICES</td><td>$4,200.00</td><td></td><td>$1,213,796.14</td></tr>
+<tr><td>07/01/2003</td><td>INCOMING WIRE — CAPITOL SERVICES INC</td><td></td><td>$50,000.00</td><td>$1,217,996.14</td></tr>
+<tr><td>03/15/2003</td><td>PAYMENT — CASCADE COUNTY MONUMENT CO (Bend, OR)</td><td>$3,400.00</td><td></td><td>$1,167,996.14</td></tr>
+<tr><td>01/15/2003</td><td>PROPERTY TAX — PARCEL 2847-0214-0300 (Station)</td><td>$2,847.00</td><td></td><td>$1,171,396.14</td></tr>
+<tr><td>01/15/2003</td><td>PROPERTY TAX — PARCEL 2847-0215-0800 (Factory lot)</td><td>$2,680.00</td><td></td><td>$1,174,243.14</td></tr>
+<tr><td>01/07/2003</td><td>TRANSFER TO 0049-8810 (Mountain Creamery LLC)</td><td>$310,000.00</td><td></td><td>$1,176,923.14</td></tr>
+<tr><td>01/02/2003</td><td>TRANSFER TO 0018-7724 (R. Calloway)</td><td>$400.00</td><td></td><td>$1,486,923.14</td></tr>
+<tr><td>01/02/2003</td><td>INCOMING WIRE — CAPITOL SERVICES INC</td><td></td><td>$50,000.00</td><td>$1,487,323.14</td></tr>
+<tr><td colspan="5" style="color:#888; font-style:italic; text-align:center;">... 94 earlier transactions ...</td></tr>
+<tr><td>06/01/1996</td><td>OPENING DEPOSIT — WIRE TRANSFER (Origin: First Bank of Delaware)</td><td></td><td>$2,000,000.00</td><td>$2,000,000.00</td></tr>
+</table>
+
+<div class="flag-alert" style="margin-top:8px;">
+  &#9888; COMPLIANCE NOTE (auto-generated): This account receives $50,000 wire transfers quarterly from Capitol Services Inc. (DE) with no invoice or memo attached. Pattern has been active since Q3 1996. BSA/AML review waived per branch manager override (D.ROURKE, 02/14/1997). Override has not been re-reviewed.
+</div>
+
+<b style="display:block; margin-top:12px;">Account #0034-2002 — Commercial Trust</b>
+<div style="font-size:10px; color:#666; margin-bottom:4px;">Current Balance: $734,500.00</div>
+<table class="data">
+<tr><th>Date</th><th>Description</th><th>Debit</th><th>Credit</th><th>Balance</th></tr>
+<tr><td>01/02/2004</td><td>INCOMING WIRE — CAPITOL SERVICES INC — MEMO: "MAINTENANCE"</td><td></td><td>$25,000.00</td><td>$734,500.00</td></tr>
+<tr><td>07/01/2003</td><td>INCOMING WIRE — CAPITOL SERVICES INC — MEMO: "MAINTENANCE"</td><td></td><td>$25,000.00</td><td>$709,500.00</td></tr>
+<tr><td>06/15/2003</td><td>CHECK #0001 — PAYABLE TO: CASH</td><td>$15,000.00</td><td></td><td>$684,500.00</td></tr>
+<tr><td>01/02/2003</td><td>INCOMING WIRE — CAPITOL SERVICES INC — MEMO: "MAINTENANCE"</td><td></td><td>$25,000.00</td><td>$699,500.00</td></tr>
+<tr><td colspan="5" style="color:#888; font-style:italic; text-align:center;">... 31 earlier transactions ...</td></tr>
+<tr><td>06/01/1996</td><td>OPENING DEPOSIT — WIRE TRANSFER (Origin: First Bank of Delaware)</td><td></td><td>$500,000.00</td><td>$500,000.00</td></tr>
+</table>
+
+<div class="flag-notice" style="margin-top:8px;">
+  &#9888; Trust account beneficiary field is blank. No trust document on file. Account classified as trust per D.ROURKE instruction at opening. CHECK #0001 payable to CASH — no endorsement record, no recipient identified.
+</div>
+
+</div>
+</div>
+
+<!-- MOUNTAIN CREAMERY -->
+<div id="bt-creamery" class="bank-content">
+<div class="content-header">Customer Detail — MOUNTAIN CREAMERY LLC</div>
+<div class="content-body">
+
+<div class="acct-detail">
+<table>
+<tr><td class="label">Entity Name:</td><td>Mountain Creamery LLC</td></tr>
+<tr><td class="label">State of Incorporation:</td><td>Oregon</td></tr>
+<tr><td class="label">Registered Agent:</td><td>D. Rourke, 120 Main Street, Deep Lake, OR 97701</td></tr>
+<tr><td class="label">Principal Officer:</td><td>N. Stokes (Managing Member)</td></tr>
+<tr><td class="label">Business Address:</td><td>14500 Route 7, Deep Lake, OR 97701</td></tr>
+<tr><td class="label">Phone:</td><td>(541) 555-0211</td></tr>
+<tr><td class="label">Customer Since:</td><td>01/07/2003</td></tr>
+<tr><td class="label">Account Manager:</td><td>D. Rourke</td></tr>
+</table>
+</div>
+
+<b>Account #0049-8810 — Commercial Checking</b>
+<div style="font-size:10px; color:#666; margin-bottom:4px;">Current Balance: $287,441.66</div>
+<table class="data">
+<tr><th>Date</th><th>Description</th><th>Debit</th><th>Credit</th><th>Balance</th></tr>
+<tr><td>01/15/2004</td><td>PAYROLL — 3 EMPLOYEES</td><td>$4,800.00</td><td></td><td>$287,441.66</td></tr>
+<tr><td>01/10/2004</td><td>DEEP LAKE GROCERY — WHOLESALE ACCT</td><td></td><td>$1,240.00</td><td>$292,241.66</td></tr>
+<tr><td>01/05/2004</td><td>VENDOR — INGREDIENT SUPPLY (Portland, OR)</td><td>$6,200.00</td><td></td><td>$291,001.66</td></tr>
+<tr><td>12/15/2003</td><td>PAYROLL — 3 EMPLOYEES</td><td>$4,800.00</td><td></td><td>$297,201.66</td></tr>
+<tr><td>12/10/2003</td><td>CASCADE COUNTY UTILITIES</td><td>$890.00</td><td></td><td>$302,001.66</td></tr>
+<tr><td>12/05/2003</td><td>VENDOR — INGREDIENT SUPPLY (Portland, OR)</td><td>$6,200.00</td><td></td><td>$302,891.66</td></tr>
+<tr><td>12/01/2003</td><td>DEEP LAKE GROCERY — WHOLESALE ACCT</td><td></td><td>$880.00</td><td>$309,091.66</td></tr>
+<tr><td>11/15/2003</td><td>VENDOR — SPECIALTY COMPOUND (no vendor name)</td><td>$12,400.00</td><td></td><td>$308,211.66</td></tr>
+<tr><td>10/15/2003</td><td>VENDOR — SPECIALTY COMPOUND (no vendor name)</td><td>$12,400.00</td><td></td><td>$320,611.66</td></tr>
+<tr><td>09/15/2003</td><td>VENDOR — SPECIALTY COMPOUND (no vendor name)</td><td>$12,400.00</td><td></td><td>$333,011.66</td></tr>
+<tr><td colspan="5" style="color:#888; font-style:italic; text-align:center;">... 14 earlier transactions ...</td></tr>
+<tr><td>01/07/2003</td><td>OPENING DEPOSIT — TRANSFER FROM 0034-2001 (Lakeview Holdings)</td><td></td><td>$310,000.00</td><td>$310,000.00</td></tr>
+</table>
+
+<div class="flag-notice" style="margin-top:8px;">
+  &#9888; PATTERN: Monthly $12,400.00 debits to unnamed vendor for "SPECIALTY COMPOUND." No vendor tax ID on file. No invoice attached. Payment method: cashier's check, picked up in person by N. Stokes. Vendor address on check: P.O. Box 1147, Wilmington, DE 19801. <span style="color:#cc0000;">[MATCHES LAKEVIEW HOLDINGS MAILING ADDRESS]</span>
+</div>
+
+</div>
+</div>
+
+<!-- D. ROURKE (STAFF) -->
+<div id="bt-rourke" class="bank-content">
+<div class="content-header">Staff Record — ROURKE, DALE A. — Branch Manager, Deep Lake</div>
+<div class="content-body">
+
+<div class="acct-detail">
+<table>
+<tr><td class="label">Full Name:</td><td>Dale Arthur Rourke</td></tr>
+<tr><td class="label">Employee ID:</td><td>CCSB-0047</td></tr>
+<tr><td class="label">Position:</td><td>Branch Manager — Deep Lake</td></tr>
+<tr><td class="label">Hire Date:</td><td>09/01/1997</td></tr>
+<tr><td class="label">Previous Employment:</td><td>WDLK Broadcasting Inc. — Technical Director (1984–1996)</td></tr>
+<tr><td class="label">Address:</td><td>338 Spruce Street, Deep Lake, OR 97701</td></tr>
+<tr><td class="label">Salary:</td><td>$62,000/yr</td></tr>
+<tr><td class="label">Direct Reports:</td><td>2 (tellers)</td></tr>
+<tr><td class="label">Security Clearance:</td><td>Level 3 (highest — branch manager override)</td></tr>
+<tr><td class="label">Performance Reviews:</td><td>All satisfactory. No disciplinary actions.</td></tr>
+</table>
+</div>
+
+<b>Personal Account #0022-5501 — Employee Checking</b>
+<table class="data" style="margin-top:4px;">
+<tr><th>Date</th><th>Description</th><th>Debit</th><th>Credit</th><th>Balance</th></tr>
+<tr><td>01/15/2004</td><td>CCSB PAYROLL — DIRECT DEPOSIT</td><td></td><td>$2,384.62</td><td>$14,211.88</td></tr>
+<tr><td>01/10/2004</td><td>TRANSFER TO EXTERNAL — FIRST BANK OF DELAWARE</td><td>$5,000.00</td><td></td><td>$11,827.26</td></tr>
+<tr><td>01/02/2004</td><td>INCOMING WIRE — CAPITOL SERVICES INC</td><td></td><td>$8,333.00</td><td>$16,827.26</td></tr>
+<tr><td>12/15/2003</td><td>CCSB PAYROLL — DIRECT DEPOSIT</td><td></td><td>$2,384.62</td><td>$8,494.26</td></tr>
+<tr><td>12/02/2003</td><td>INCOMING WIRE — CAPITOL SERVICES INC</td><td></td><td>$8,333.00</td><td>$6,109.64</td></tr>
+<tr><td>11/15/2003</td><td>CCSB PAYROLL — DIRECT DEPOSIT</td><td></td><td>$2,384.62</td><td>-$2,223.36</td></tr>
+<tr><td>11/02/2003</td><td>INCOMING WIRE — CAPITOL SERVICES INC</td><td></td><td>$8,333.00</td><td>-$4,607.98</td></tr>
+<tr><td colspan="5" style="color:#888; font-style:italic; text-align:center;">... pattern continues monthly ...</td></tr>
+</table>
+
+<div class="flag-alert" style="margin-top:8px;">
+  &#9888; CONFLICT OF INTEREST: D. Rourke receives monthly $8,333.00 wire transfers (~$100,000/yr) from Capitol Services Inc. — the same entity that funds Lakeview Holdings LLC accounts. D. Rourke is also the account manager for Lakeview Holdings, Mountain Creamery, and all properties associated with these entities. This relationship has never been disclosed. No compliance review on file.
+</div>
+
+</div>
+</div>
+
+<!-- H. WENTWORTH -->
+<div id="bt-wentworth" class="bank-content">
+<div class="content-header">Customer Detail — WENTWORTH, HAROLD J.</div>
+<div class="content-body">
+
+<div class="acct-detail">
+<table>
+<tr><td class="label">Full Name:</td><td>Harold James Wentworth</td></tr>
+<tr><td class="label">Address:</td><td>15 Elm Street, Deep Lake, OR 97701</td></tr>
+<tr><td class="label">Occupation:</td><td>Mayor, City of Deep Lake (elected 2000)</td></tr>
+<tr><td class="label">Customer Since:</td><td>04/18/1985</td></tr>
+<tr><td class="label">Account Manager:</td><td>D. Rourke</td></tr>
+</table>
+</div>
+
+<b>Account #0012-4490 — Personal Checking</b>
+<table class="data" style="margin-top:4px;">
+<tr><th>Date</th><th>Description</th><th>Debit</th><th>Credit</th><th>Balance</th></tr>
+<tr><td>01/15/2004</td><td>CITY OF DEEP LAKE — PAYROLL</td><td></td><td>$1,846.15</td><td>$8,901.33</td></tr>
+<tr><td>01/05/2004</td><td>DEEP LAKE GROCERY</td><td>$87.44</td><td></td><td>$7,055.18</td></tr>
+<tr><td>12/15/2003</td><td>CITY OF DEEP LAKE — PAYROLL</td><td></td><td>$1,846.15</td><td>$7,142.62</td></tr>
+<tr><td>12/01/2003</td><td>CASCADE COUNTY UTILITIES</td><td>$142.00</td><td></td><td>$5,296.47</td></tr>
+<tr><td colspan="5" style="color:#888; font-style:italic; text-align:center;">... normal personal transactions ...</td></tr>
+</table>
+
+<div class="flag-notice" style="margin-top:8px;">
+  &#9888; HISTORICAL NOTE: H. Wentworth held a second account (#0012-4491, savings) that was closed in 1997. Final balance of $34,000 was withdrawn as cashier's check. Payable to: SELF. Same week, Wentworth made a $33,500 down payment on his Elm Street home. Source of $34,000 in savings account: single deposit on 08/15/1996 — one wire transfer from WDLK BROADCASTING INC payroll account (#0019-3341). Memo: "Consulting — Community Liaison services." This was two weeks after TV Odyssey went off the air. WDLK payroll account was closed the following month.
+</div>
+
+</div>
+</div>
+
+<!-- 847 LAKESHORE MORTGAGE -->
+<div id="bt-847" class="bank-content">
+<div class="content-header">Mortgage Records — 847 Lakeshore Drive, Deep Lake, OR 97701</div>
+<div class="content-body">
+
+<div class="flag-notice">
+  &#9888; PROPERTY FLAG (added 04/22/1997 by D.ROURKE): "Upon vacancy, property to be resold through CCSB Deep Lake branch exclusively. Listing price to be set at assessed value minus 8-12%. Basement access to be sealed prior to showing. Coordinate with County RE office. Do not use external realtors."
+</div>
+
+<b>Mortgage History</b>
+<table class="data" style="margin-top:4px;">
+<tr><th>Loan #</th><th>Borrower</th><th>Amount</th><th>Originated</th><th>Status</th><th>Payments Made</th><th>Disposition</th></tr>
+<tr><td>MTG-2003-0041</td><td>DAVIS, MARK R & JENNIFER L</td><td>$128,000</td><td>09/14/2003</td><td style="color:green;">ACTIVE</td><td>3 of 360</td><td></td></tr>
+<tr><td>MTG-2002-0019</td><td>OKONKWO, SAMUEL E</td><td>$133,000</td><td>06/22/2002</td><td style="color:#cc0000;">DEFAULT</td><td>11 of 360</td><td>BORROWER MISSING. Loan written off. <span style="color:#cc0000;">No collections pursued per D.ROURKE.</span></td></tr>
+<tr><td>MTG-2001-0008</td><td>PETROVIC, ANA M & DRAGAN</td><td>$140,000</td><td>03/08/2001</td><td style="color:#cc0000;">DEFAULT</td><td>13 of 360</td><td>BORROWERS MISSING. Loan written off. <span style="color:#cc0000;">No collections pursued per D.ROURKE.</span></td></tr>
+<tr><td>MTG-1999-0031</td><td>CHEN, DAVID W & LISA M</td><td>$144,000</td><td>11/30/1999</td><td style="color:#cc0000;">DEFAULT</td><td>14 of 360</td><td>BORROWERS MISSING. Loan written off.</td></tr>
+<tr><td>MTG-1998-0022</td><td>MORRISON, CAROL A</td><td>$147,000</td><td>08/15/1998</td><td style="color:#cc0000;">DEFAULT</td><td>12 of 360</td><td>BORROWER MISSING. Loan written off.</td></tr>
+<tr><td>MTG-1997-0009</td><td>WEAVER, THOMAS J & PATRICIA</td><td>$152,000</td><td>05/03/1997</td><td style="color:#cc0000;">DEFAULT</td><td>11 of 360</td><td>BORROWERS MISSING. Loan written off.</td></tr>
+<tr><td>MTG-1996-0044</td><td>GUTIERREZ, MARIA R</td><td>$155,000</td><td>01/20/1996</td><td style="color:#cc0000;">DEFAULT</td><td>13 of 360</td><td>BORROWER MISSING. Loan written off.</td></tr>
+<tr><td>MTG-1994-0017</td><td>HARDING, ROBERT L & DIANE</td><td>$158,000</td><td>09/09/1994</td><td style="color:#cc0000;">DEFAULT</td><td>14 of 360</td><td>BORROWERS MISSING. Loan written off.</td></tr>
+<tr><td>MTG-1993-0005</td><td>NILES, GREGORY P</td><td>$161,000</td><td>04/12/1993</td><td style="color:#cc0000;">DEFAULT</td><td>12 of 360</td><td>BORROWER MISSING. Loan written off.</td></tr>
+</table>
+
+<div class="flag-alert" style="margin-top:8px;">
+  &#9888; LOSS ANALYSIS: CCSB has written off $1,190,000 in defaulted mortgages on this single property since 1993. Nine consecutive borrowers have gone missing. Zero insurance claims filed. Zero police referrals initiated by bank. Zero regulatory reports filed. All resale instructions issued by D.ROURKE. Property has been resold within 60 days of each vacancy.
+</div>
+
+<div class="flag-alert">
+  &#9888; NOTE (system-generated 11/01/2003): Current borrowers DAVIS have made 3 payments. Based on historical pattern, projected vacancy window: June–November 2004.
+</div>
+
+</div>
+</div>
+
+<!-- AUDIT LOG -->
+<div id="bt-audit" class="bank-content">
+<div class="content-header">System Audit Log — Last 30 Days</div>
+<div class="content-body">
+<div class="audit-entry">
+01/28/2004 09:14:22 — USER: D.ROURKE — ACTION: Accessed restricted file RF-0041<br>
+01/28/2004 09:12:05 — USER: D.ROURKE — ACTION: Viewed account 0034-2001 (Lakeview Holdings)<br>
+01/27/2004 16:44:18 — USER: D.ROURKE — ACTION: Override — suppress BSA alert #2004-0012<br>
+01/27/2004 16:40:33 — SYSTEM: BSA/AML alert #2004-0012 generated — Lakeview Holdings incoming wire $50,000 (quarterly pattern)<br>
+01/22/2004 11:30:00 — USER: D.ROURKE — ACTION: Modified account note — 847 Lakeshore mortgage file<br>
+01/22/2004 11:28:14 — USER: D.ROURKE — ACTION: Added projected vacancy note to MTG-2003-0041<br>
+01/15/2004 08:00:01 — SYSTEM: Auto-generated property tax payment — Lakeview Holdings<br>
+01/10/2004 14:22:09 — USER: D.ROURKE — ACTION: Initiated wire transfer $5,000 to First Bank of Delaware (personal)<br>
+01/07/2004 09:05:44 — USER: D.ROURKE — ACTION: Approved cashier's check — Mountain Creamery — payee: CASH — $12,400<br>
+01/02/2004 08:00:01 — SYSTEM: Auto-transfer $400 Lakeview Holdings → R. Calloway checking<br>
+01/02/2004 08:00:00 — SYSTEM: Incoming wire processed — Capitol Services Inc → Lakeview Holdings $50,000<br>
+01/02/2004 08:00:00 — SYSTEM: Incoming wire processed — Capitol Services Inc → D. Rourke $8,333<br>
+<br>
+12/27/2003 22:14:07 — USER: D.ROURKE — ACTION: Accessed restricted file RF-0088<br>
+12/27/2003 22:13:55 — USER: D.ROURKE — ACTION: Accessed restricted file RF-0041<br>
+12/27/2003 22:13:01 — <span style="color:#cc0000;">USER: D.ROURKE — ACTION: Login from non-branch terminal (IP: 10.0.7.142) — AFTER HOURS</span><br>
+<br>
+12/15/2003 16:01:22 — USER: D.ROURKE — ACTION: Override — suppress BSA alert #2003-0089<br>
+12/15/2003 16:00:44 — SYSTEM: BSA/AML alert #2003-0089 generated — Pembrook Technical Services payment #4 ($4,200)<br>
+<br>
+<span style="color:#cc0000;">12/01/2003 03:17:44 — SYSTEM: Failed login attempt — USER: R.CALLOWAY — Terminal: REMOTE — 3 attempts</span><br>
+<span style="color:#cc0000;">12/01/2003 03:17:12 — SYSTEM: Failed login attempt — USER: R.CALLOWAY — Terminal: REMOTE — 2 attempts</span><br>
+<span style="color:#cc0000;">12/01/2003 03:16:58 — SYSTEM: Failed login attempt — USER: R.CALLOWAY — Terminal: REMOTE — 1 attempt</span><br>
+</div>
+
+<div class="flag-alert" style="margin-top:8px;">
+  &#9888; SECURITY ALERT: User R.CALLOWAY has no active system credentials. Account was never provisioned in employee directory. Three login attempts on 12/01/2003 used the WDLK Broadcasting Inc payroll account number as a password. Source IP could not be resolved.
+</div>
+
+</div>
+</div>
+
+<!-- FLAGGED ACCOUNTS -->
+<div id="bt-flagged" class="bank-content">
+<div class="content-header">Flagged Accounts Summary</div>
+<div class="content-body">
+
+<table class="data">
+<tr><th>Acct</th><th>Name</th><th>Flag Type</th><th>Date Flagged</th><th>Flagged By</th><th>Status</th></tr>
+<tr><td>0034-2001</td><td>LAKEVIEW HOLDINGS LLC</td><td>BSA/AML — Recurring wires, no documentation</td><td>02/14/1997</td><td>SYSTEM</td><td style="color:#cc0000;">SUPPRESSED (D.ROURKE)</td></tr>
+<tr><td>0034-2002</td><td>LAKEVIEW HOLDINGS LLC</td><td>Trust — No trust document, no beneficiary</td><td>06/01/1996</td><td>SYSTEM</td><td style="color:#cc0000;">SUPPRESSED (D.ROURKE)</td></tr>
+<tr><td>0018-7724</td><td>CALLOWAY, RAYMOND E.</td><td>ID verification failure</td><td>03/15/2003</td><td>SYSTEM</td><td style="color:#cc0000;">SUPPRESSED (D.ROURKE)</td></tr>
+<tr><td>0018-7724</td><td>CALLOWAY, RAYMOND E.</td><td>Inactive customer — no contact 7+ years</td><td>07/29/2003</td><td>SYSTEM</td><td style="color:#cc0000;">SUPPRESSED (D.ROURKE)</td></tr>
+<tr><td>0049-8810</td><td>MOUNTAIN CREAMERY LLC</td><td>Vendor payments — no tax ID</td><td>09/15/2003</td><td>SYSTEM</td><td style="color:#cc0000;">SUPPRESSED (D.ROURKE)</td></tr>
+<tr><td>0022-5501</td><td>ROURKE, DALE A. (STAFF)</td><td>Conflict — receives funds from managed client</td><td>10/02/2003</td><td>SYSTEM</td><td style="color:#cc0000;">SUPPRESSED (D.ROURKE)</td></tr>
+<tr><td>MTG-2003-0041</td><td>847 LAKESHORE DR</td><td>Property — 9 consecutive defaults, no reporting</td><td>11/01/2003</td><td>SYSTEM</td><td style="color:#cc0000;">SUPPRESSED (D.ROURKE)</td></tr>
+</table>
+
+<div class="flag-alert" style="margin-top:8px;">
+  &#9888; ALL FLAGS ON THIS PAGE HAVE BEEN MANUALLY SUPPRESSED BY THE SAME USER (D.ROURKE). This user is also the subject of one of the suppressed flags. Self-suppression of compliance flags is a federal banking violation under 31 USC § 5318.
+</div>
+
+</div>
+</div>
+
+<!-- RESTRICTED FILES -->
+<div id="bt-restricted" class="bank-content">
+<div class="content-header">Restricted Files — Level 3 Access Required</div>
+<div class="content-body">
+
+<table class="data">
+<tr><th>File ID</th><th>Subject</th><th>Classification</th><th>Created</th><th>Created By</th><th>Last Accessed</th></tr>
+<tr style="background-color: #fff0f0;"><td>RF-0041</td><td>CALLOWAY, R. — Identity verification discrepancy</td><td>CONFIDENTIAL</td><td>03/15/2003</td><td>SYSTEM</td><td>01/28/2004 (D.ROURKE)</td></tr>
+<tr><td>RF-0042</td><td>LAKEVIEW HOLDINGS — Corporate structure memo</td><td>CONFIDENTIAL</td><td>02/14/1997</td><td>D.ROURKE</td><td>12/27/2003 (D.ROURKE)</td></tr>
+<tr><td>RF-0055</td><td>847 LAKESHORE DR — Property disposition protocol</td><td>CONFIDENTIAL</td><td>04/22/1997</td><td>D.ROURKE</td><td>09/14/2003 (D.ROURKE)</td></tr>
+<tr style="background-color: #fff0f0;"><td>RF-0088</td><td>CAPITOL SERVICES INC — Disbursement schedule & compliance waiver</td><td>RESTRICTED — BRANCH MGR ONLY</td><td>08/19/2003</td><td>D.ROURKE</td><td>12/27/2003 (D.ROURKE)</td></tr>
+<tr><td>RF-0091</td><td>PEMBROOK TECHNICAL SERVICES — Contract (no copy on file, reference only)</td><td>CONFIDENTIAL</td><td>09/01/2003</td><td>D.ROURKE</td><td>10/15/2003 (D.ROURKE)</td></tr>
+</table>
+
+<br>
+<b>File Detail — RF-0041:</b>
+<div class="acct-detail" style="margin-top:4px;">
+  <b>Subject:</b> Identity verification — CALLOWAY, RAYMOND E.<br><br>
+  During routine 2003 audit, system flagged customer SSN ***-**-4178 as non-matching against Oregon DMV records. Follow-up inquiry to SSA returned: "No record found for this number." Oregon DMV has no driver's license issued to Raymond E. Calloway. Cascade County has no birth, death, marriage, or property records for any Calloway prior to 1991.<br><br>
+  <b>Conclusion:</b> Customer identity cannot be verified through any standard channel. SSN appears to be unissued. Customer has not visited branch since 07/29/1996.<br><br>
+  <b>Recommended Action:</b> SAR filing, account freeze, regulatory notification.<br><br>
+  <b>Action Taken:</b> <span style="color:#cc0000;">None. Flag suppressed by D. Rourke on 03/16/2003. Note added to file: "Historical account. No action required. Do not escalate."</span>
+</div>
+
+<br>
+<b>File Detail — RF-0088:</b>
+<div class="acct-detail" style="margin-top:4px;">
+  <b>Subject:</b> Capitol Services Inc. — Disbursement schedule & compliance waiver<br><br>
+  <b>Contents:</b> Faxed document, 3 pages. Pages 1 and 3 are legible. Page 2 failed to transmit (blank).<br><br>
+  <b>Page 1 — Disbursement Schedule (FY 2003-2004):</b><br>
+  <div style="font-family: 'Courier New', monospace; background-color: #f0ede1; padding: 10px; border: 1px solid #ccc; font-size: 10px; margin: 6px 0;">
+    CAPITOL SERVICES INC — DISBURSEMENT AUTHORIZATION<br>
+    Client ref: LVH-1996-001<br>
+    Receiving institution: CCSB — Deep Lake Branch<br><br>
+    Quarterly — Acct 0034-2001: .... $50,000.00<br>
+    Quarterly — Acct 0034-2002: .... $25,000.00<br>
+    Monthly — Acct 0022-5501: ...... $8,333.00<br>
+    Monthly — PTS contract: ........ $4,200.00<br>
+    Annual — Acct 0018-7724: ....... $400.00<br>
+    Annual — Property tax (x2): .... variable<br>
+    As needed — CMC (ref: 0049-8810) ... per invoice<br><br>
+    Disbursements to continue until further notice.<br>
+    Local manager: DO NOT file CTR or SAR on above transactions.<br>
+    Compliance waiver on file with [<span style="color:#cc0000;">PAGE 2 — TRANSMISSION FAILED</span>]
+  </div>
+  <br>
+  <b>Page 3 — Signatures:</b><br>
+  <div style="font-family: 'Courier New', monospace; background-color: #f0ede1; padding: 10px; border: 1px solid #ccc; font-size: 10px; margin: 6px 0;">
+    Authorized by: [signature illegible]<br>
+    Title: [transmission artifact — unreadable]<br>
+    Date: 06/01/1996<br><br>
+    Acknowledged by: D. A. Rourke<br>
+    Title: Branch Manager, CCSB Deep Lake<br>
+    Date: 08/18/2003<br><br>
+    <span style="color:#888;">Handwritten note in margin (D. Rourke's hand): "original from '96. re-sent per request. who requested??"</span>
+  </div>
+  <br>
+  <b>Filed by:</b> D. Rourke<br>
+  <b>Notes:</b> <span style="color:#cc0000;">[No notes entered]</span>
+</div>
+
+</div>
+</div>
+
+</div><!-- content -->
+
+</div><!-- main-area -->
+
+<!-- STATUS BAR -->
+<div class="status-bar">
+  <span>Connected to CCSB_PROD_01 | Records: 2,847 | Last backup: 01/28/2004 02:00 AM</span>
+  <span>CCSB Account Management System v3.2 | &copy; 2001 Cascade County Savings Bank</span>
+</div>
+
+</div><!-- app-frame -->
+
+</body>
+</html>

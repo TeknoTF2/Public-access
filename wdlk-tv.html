@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<title>WDLK-TV — TV Odyssey — Deep Lake, Oregon</title>
+<!-- Site built: 03/15/1997 -->
+<!-- Last modified: 03/15/1997 -->
+<!-- DO NOT UPDATE. LEAVE AS IS. — mgmt -->
+<!-- developer: r.calloway@wdlk.local -->
+<!-- Page template: /pages/index.html -->
+<!-- Other pages: /pages/schedule.html, /pages/contact.html, /pages/about.html, /pages/staff.html -->
+<style>
+body {
+  background-color: #1a1a2e;
+  color: #ccc;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  margin: 0;
+  padding: 0;
+}
+a { color: #5599cc; }
+a:hover { color: #88ccff; }
+.wrapper {
+  width: 640px;
+  margin: 0 auto;
+  padding: 20px;
+}
+.header {
+  text-align: center;
+  padding: 25px 0;
+  border-bottom: 2px solid #333;
+}
+.placeholder-img {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #12122a;
+  border: 2px dashed #334;
+  color: #556;
+  font-size: 9px;
+  font-family: Arial, sans-serif;
+  text-align: center;
+  padding: 8px;
+}
+.station-name {
+  font-size: 14px;
+  color: #888;
+  letter-spacing: 3px;
+  margin-top: 8px;
+}
+.nav-bar {
+  text-align: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #333;
+}
+.nav-bar a {
+  margin: 0 15px;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #667;
+}
+.nav-bar a:hover { color: #99aacc; }
+.main-content {
+  padding: 30px 0;
+  text-align: center;
+  min-height: 200px;
+}
+.footer {
+  border-top: 1px solid #333;
+  padding: 15px 0;
+  text-align: center;
+  font-size: 10px;
+  color: #555;
+}
+/* Tab system for pages */
+.page-tab-row { display: flex; gap: 0; justify-content: center; margin: 20px 0 0 0; }
+.page-tab {
+  padding: 6px 16px;
+  background-color: #12122a;
+  border: 1px solid #333;
+  border-bottom: none;
+  cursor: pointer;
+  font-family: Arial, sans-serif;
+  font-size: 10px;
+  color: #667;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.page-tab.active { background-color: #1a1a2e; color: #99aacc; border-bottom: 1px solid #1a1a2e; }
+.page-tab:hover { color: #88ccff; }
+.page-content { display: none; padding: 30px 20px; min-height: 200px; border: 1px solid #333; border-top: none; }
+.page-content.active { display: block; }
+</style>
+<script>
+function showStationPage(name) {
+  document.querySelectorAll('.page-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.page-content').forEach(t => t.classList.remove('active'));
+  var tab = document.querySelector('[data-stab="'+name+'"]');
+  if (tab) tab.classList.add('active');
+  var page = document.getElementById('sp-'+name);
+  if (page) page.classList.add('active');
+}
+</script>
+</head>
+<body>
+
+<div class="wrapper">
+
+<div class="header">
+  <img src="images/tvodyssey-logo.png" width="200" height="120" alt="TV Odyssey" 
+    onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex';">
+  <div class="placeholder-img" style="width:200px;height:120px;display:none;">tvodyssey-logo.png<br>(TV Odyssey Logo)</div>
+  <div class="station-name">WDLK-TV &bull; CHANNEL 34 &bull; DEEP LAKE, OREGON</div>
+</div>
+
+<!-- PAGE TABS -->
+<div class="page-tab-row">
+  <div class="page-tab active" data-stab="home" onclick="showStationPage('home')">Home</div>
+  <div class="page-tab" data-stab="schedule" onclick="showStationPage('schedule')">Schedule</div>
+  <div class="page-tab" data-stab="about" onclick="showStationPage('about')">About</div>
+  <div class="page-tab" data-stab="contact" onclick="showStationPage('contact')">Contact</div>
+  <!-- /pages/staff.html is not linked. Not listed in navigation. -->
+</div>
+
+<!-- HOME PAGE -->
+<div id="sp-home" class="page-content active">
+  <div style="text-align:center; color:#667; padding: 40px 0;">
+    <p style="font-size:16px; color:#888;">Welcome to WDLK-TV</p>
+    <p>Your home for original entertainment on Channel 34.</p>
+    <br><br>
+    <img src="images/station-exterior.jpg" width="300" height="200" alt="WDLK Station" 
+      onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+    <div class="placeholder-img" style="width:300px;height:200px;display:none;margin:0 auto;">station-exterior.jpg<br>(Station Building)</div>
+    <br><br>
+    <p style="font-size:10px; color:#444;">WDLK Broadcasting Inc. &bull; 14200 Route 7 &bull; Deep Lake, OR 97701</p>
+  </div>
+</div>
+
+<!-- SCHEDULE PAGE -->
+<div id="sp-schedule" class="page-content">
+  <div style="color: #667; padding: 20px 0;">
+    <p style="font-size: 14px; color:#888; text-align:center;">Program Schedule</p>
+    <p style="text-align:center; font-size:10px; color:#555;"><i>Week of March 10, 1997 — Final Schedule</i></p>
+    <br>
+    <table style="width:100%; border-collapse:collapse; font-size:10px; color:#778;">
+    <tr style="border-bottom:1px solid #333;">
+      <th style="padding:5px 8px; text-align:left; color:#99aacc; width:80px;">TIME</th>
+      <th style="padding:5px 8px; text-align:left; color:#99aacc;">MON</th>
+      <th style="padding:5px 8px; text-align:left; color:#99aacc;">TUE</th>
+      <th style="padding:5px 8px; text-align:left; color:#99aacc;">WED</th>
+      <th style="padding:5px 8px; text-align:left; color:#99aacc;">THU</th>
+      <th style="padding:5px 8px; text-align:left; color:#99aacc;">FRI</th>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:4px 8px; color:#555;">7:00 AM</td>
+      <td style="padding:4px 8px;">Ranger Rick's Nature Hour</td>
+      <td style="padding:4px 8px;">Ranger Rick's Nature Hour</td>
+      <td style="padding:4px 8px;">Ranger Rick's Nature Hour</td>
+      <td style="padding:4px 8px;">Ranger Rick's Nature Hour</td>
+      <td style="padding:4px 8px;">Ranger Rick's Nature Hour</td>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:4px 8px; color:#555;">8:00 AM</td>
+      <td style="padding:4px 8px;">The Fridge Friends</td>
+      <td style="padding:4px 8px;">The Fridge Friends</td>
+      <td style="padding:4px 8px;">The Fridge Friends</td>
+      <td style="padding:4px 8px;">The Fridge Friends</td>
+      <td style="padding:4px 8px;">The Fridge Friends</td>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:4px 8px; color:#555;">9:00 AM</td>
+      <td style="padding:4px 8px;">The Puzzle Palace</td>
+      <td style="padding:4px 8px;">Captain Cosmos</td>
+      <td style="padding:4px 8px;">The Puzzle Palace</td>
+      <td style="padding:4px 8px;">Captain Cosmos</td>
+      <td style="padding:4px 8px;">The Puzzle Palace</td>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:4px 8px; color:#555;">10:00 AM</td>
+      <td colspan="5" style="padding:4px 8px; color:#444; font-style:italic;">— OFF AIR —</td>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:4px 8px; color:#555;">3:00 PM</td>
+      <td style="padding:4px 8px;">Captain Cosmos</td>
+      <td style="padding:4px 8px;">The Puzzle Palace</td>
+      <td style="padding:4px 8px;">Captain Cosmos</td>
+      <td style="padding:4px 8px;">The Puzzle Palace</td>
+      <td style="padding:4px 8px;">Movie Matinee</td>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:4px 8px; color:#555;">4:00 PM</td>
+      <td style="padding:4px 8px;">The Fridge Friends</td>
+      <td style="padding:4px 8px;">The Fridge Friends</td>
+      <td style="padding:4px 8px;">The Fridge Friends</td>
+      <td style="padding:4px 8px;">The Fridge Friends</td>
+      <td style="padding:4px 8px;">Movie Matinee</td>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:4px 8px; color:#555;">5:00 PM</td>
+      <td style="padding:4px 8px;">Deep Lake Community Hour</td>
+      <td style="padding:4px 8px;">Deep Lake Community Hour</td>
+      <td style="padding:4px 8px;">Deep Lake Community Hour</td>
+      <td style="padding:4px 8px;">Deep Lake Community Hour</td>
+      <td style="padding:4px 8px;">Movie Matinee</td>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:4px 8px; color:#555;">6:00 PM</td>
+      <td style="padding:4px 8px;">Movie Matinee</td>
+      <td style="padding:4px 8px;">Movie Matinee</td>
+      <td style="padding:4px 8px;">Movie Matinee</td>
+      <td style="padding:4px 8px;">Movie Matinee</td>
+      <td style="padding:4px 8px;">Movie Matinee</td>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:4px 8px; color:#555;">8:00 PM</td>
+      <td colspan="5" style="padding:4px 8px; color:#444; font-style:italic;">— OFF AIR —</td>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:4px 8px; color:#555;">12:00 AM</td>
+      <td colspan="4" style="padding:4px 8px; color:#444; font-style:italic;">— OFF AIR —</td>
+      <td style="padding:4px 8px;"><a href="#" onclick="showStationPage('staff');return false;" style="color:#556; text-decoration:none;" onmouseover="this.style.color='#99aacc'" onmouseout="this.style.color='#556'">S/T-7</a></td>
+    </tr>
+    </table>
+    <br>
+    <p style="font-size:9px; color:#444; text-align:center;"><i>Schedule subject to change without notice. Final weekly schedule issued prior to broadcast cessation.</i></p>
+  </div>
+</div>
+
+<!-- ABOUT PAGE -->
+<div id="sp-about" class="page-content">
+  <div style="text-align:center; color: #667; padding: 40px 0;">
+    <p style="font-size: 14px; color:#888;">About WDLK-TV</p>
+    <br>
+    <p>WDLK-TV is a locally-owned television station serving the Deep Lake community on UHF Channel 34.</p>
+    <p>Our mission is to provide original entertainment and educational programming for viewers of all ages.</p>
+    <br>
+    <p style="font-size:10px; color:#444;">WDLK Broadcasting Inc. is a subsidiary of Lakeview Holdings LLC.</p>
+  </div>
+</div>
+
+<!-- CONTACT PAGE -->
+<div id="sp-contact" class="page-content">
+  <div style="color: #888; padding: 20px;">
+    <p style="font-size: 14px; text-align:center; margin-bottom: 20px;">Contact Us</p>
+
+    <p><b>WDLK-TV</b></p>
+    <p>14200 Route 7<br>Deep Lake, OR 97701</p>
+    <br>
+    <p>Phone: (541) 555-0199</p>
+    <p>Fax: (541) 555-0198</p>
+    <br>
+    <p>General Inquiries: <a href="mailto:info@wdlk-tv.com">info@wdlk-tv.com</a></p>
+    <p>Programming: <a href="mailto:programming@wdlk-tv.com">programming@wdlk-tv.com</a></p>
+    <br>
+    <p style="font-size:10px; color:#555;">For technical issues with this website, contact the <a href="mailto:webmaster@wdlk-tv.com">webmaster</a>.</p>
+  </div>
+</div>
+
+<!-- HIDDEN STAFF PAGE - not linked from navigation -->
+<!-- To access: add staff.html to URL or find through sitemap -->
+<!-- This is the page players find by reading the HTML source or guessing -->
+<div id="sp-staff" class="page-content">
+  <div style="color: #888; padding: 20px;">
+    <p style="font-size: 14px; text-align:center; color:#cc9966; margin-bottom: 20px;">Staff Directory</p>
+    <p style="text-align:center; font-size:10px; color:#555; margin-bottom:20px;"><i>Internal use only. Not for public distribution.</i></p>
+
+    <table style="width:100%; border-collapse:collapse; font-size:11px;">
+    <tr style="border-bottom:1px solid #333;">
+      <td style="padding:6px; color:#99aacc; width:160px;"><b>Station Manager</b></td>
+      <td style="padding:6px;">R. Calloway</td>
+      <td style="padding:6px; font-size:10px; color:#555;">1991 — present</td>
+    </tr>
+    <tr style="border-bottom:1px solid #333;">
+      <td style="padding:6px; color:#99aacc;"><b>Technical Director</b></td>
+      <td style="padding:6px;">D. Rourke</td>
+      <td style="padding:6px; font-size:10px; color:#555;">1984 — 1996</td>
+    </tr>
+    <tr style="border-bottom:1px solid #333;">
+      <td style="padding:6px; color:#99aacc;"><b>Programming Director</b></td>
+      <td style="padding:6px;">M. Hale</td>
+      <td style="padding:6px; font-size:10px; color:#555;">1984 — 1993</td>
+    </tr>
+    <tr style="border-bottom:1px solid #333;">
+      <td style="padding:6px; color:#99aacc;"><b>Production</b></td>
+      <td style="padding:6px;">E. Vasquez</td>
+      <td style="padding:6px; font-size:10px; color:#555;">1985 — 1996</td>
+    </tr>
+    <tr style="border-bottom:1px solid #333;">
+      <td style="padding:6px; color:#99aacc;"><b>Production</b></td>
+      <td style="padding:6px;">K. Osei</td>
+      <td style="padding:6px; font-size:10px; color:#555;">1988 — 1996</td>
+    </tr>
+    <tr style="border-bottom:1px solid #333;">
+      <td style="padding:6px; color:#99aacc;"><b>Operations</b></td>
+      <td style="padding:6px;">T. Marsh</td>
+      <td style="padding:6px; font-size:10px; color:#555;">1984 — 1996</td>
+    </tr>
+    <tr style="border-bottom:1px solid #333;">
+      <td style="padding:6px; color:#99aacc;"><b>Community Liaison</b></td>
+      <td style="padding:6px;">H. Wentworth</td>
+      <td style="padding:6px; font-size:10px; color:#555;">1990 — 1996</td>
+    </tr>
+    </table>
+
+    <br>
+    <p style="font-size:10px; color:#444; border-top:1px solid #333; padding-top:10px;">
+      Note: Staff records prior to 1991 incomplete. Original personnel files transferred to off-site storage per directive RC-1996-001. 
+      Current status of former employees: SEE SUPPLEMENTAL FILE S-7.
+    </p>
+    <p style="font-size:10px; color:#333;">
+      Last updated: 08/01/1996
+    </p>
+  </div>
+</div>
+
+<div class="footer">
+  &copy; 1997 WDLK Broadcasting Inc. All Rights Reserved.<br>
+  A Lakeview Holdings LLC Property
+</div>
+
+<!-- 
+  SITEMAP (for crawlers):
+  /pages/index.html
+  /pages/schedule.html
+  /pages/about.html
+  /pages/contact.html
+  /pages/staff.html
+-->
+
+</div><!-- wrapper -->
+
+<!-- To view the hidden staff page, click this invisible link or add #staff to URL: -->
+<a href="#" onclick="showStationPage('staff');return false;" style="position:fixed;bottom:0;right:0;width:10px;height:10px;opacity:0;">.</a>
+
+<script>
+// Check URL hash on load
+if (window.location.hash === '#staff') {
+  showStationPage('staff');
+}
+// Also allow ?page=staff
+const params = new URLSearchParams(window.location.search);
+if (params.get('page') === 'staff') {
+  showStationPage('staff');
+}
+</script>
+
+</body>
+</html>

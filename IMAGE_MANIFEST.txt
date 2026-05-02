@@ -1,0 +1,115 @@
+============================================================
+DEEP LAKE WEBSITES — IMAGE MANIFEST
+============================================================
+Drop all images into the "images/" folder with the exact
+filenames listed below. The sites will pick them up
+automatically. If an image is missing, a labeled placeholder
+will show instead.
+============================================================
+
+SITE: DeepLakeOregon.com (deeplakoregon.html)
+------------------------------------------------------------
+town-banner.jpg
+  - A banner photo of a small Oregon mountain town. Lake,
+    trees, overcast sky. Should look like a low-res digital
+    camera shot from ~2001.
+
+mayor-photo.jpg
+  - Portrait of the mayor. Middle-aged, friendly, bland.
+    Could be a stock photo or an AI-generated face. Should
+    look like a scanned photo.
+
+town-hall.jpg
+  - Small town municipal building. Nothing special.
+
+deep-lake-photo.jpg
+  - The actual lake. Should feel peaceful but slightly
+    empty/lonely. Low resolution.
+
+town-seal.gif
+  - A simple town seal/logo. Can be clipart-quality.
+
+
+SITE: TVOdysseyFans.net (tvodysseyfans.html)
+------------------------------------------------------------
+tvodyssey-logo.png
+  - The TV Odyssey logo. This is important — it shows up on
+    multiple sites. Retro public access TV aesthetic.
+    Starbursts, bold text, maybe a TV set shape. 80s/90s
+    local TV energy.
+
+phpbb-logo.gif
+  - Optional. A small phpBB forum logo. Can skip this one.
+
+
+SITE: FindTheLight.org (findthelight.html)
+------------------------------------------------------------
+broadcast-tower.jpg
+  - A blurry, dark photo of a broadcasting tower at night.
+    The key prop: it should have strange/unusual equipment
+    on it. Something that doesn't look like a normal antenna.
+
+evidence-photo-1.jpg
+  - Blurry photo of the TV Odyssey station building exterior.
+
+evidence-photo-2.jpg
+  - A grainy nighttime photo of something ambiguous near
+    Deep Lake. Could be lights, could be nothing.
+
+evidence-photo-3.jpg
+  - A scanned document, partially redacted or too blurry
+    to fully read. Government letterhead visible.
+
+animated-flame.gif
+  - Optional. Animated flame/fire GIF for page borders.
+    Easy to find online — search "90s flame gif."
+
+
+SITE: OregonPropertyRecords.gov (propertyrecords.html)
+------------------------------------------------------------
+oregon-state-seal.gif
+  - Oregon state seal. Simple, official-looking.
+
+(No other images needed — this site is pure data tables.)
+
+
+SITE: DeepLakeLibrary.org (library.html)
+------------------------------------------------------------
+library-header.jpg
+  - Photo of a small-town public library building. Brick,
+    modest, maybe a book drop out front.
+
+reading-owl.gif
+  - A cartoon owl mascot. Clipart quality. Holding a book.
+
+
+SITE: Jake's Deep Lake Page (jakes-page.html)
+------------------------------------------------------------
+jake-dog.jpg
+  - Photo of a golden retriever or mutt. "This is Buster!"
+    energy. Should look like a late-90s digital camera shot.
+
+jake-skateboard.jpg
+  - Optional. A teenager skateboarding. Late 90s aesthetic.
+
+construction.gif
+  - Optional. An "under construction" animated GIF.
+    Classic 90s web. Easy to find online.
+
+
+SITE: WDLK-TV.com (wdlk-tv.html)
+------------------------------------------------------------
+tvodyssey-logo.png
+  - Same logo file as the fan forum. Reused across sites.
+
+station-exterior.jpg
+  - The TV Odyssey / WDLK station building. Small,
+    unremarkable. Maybe a satellite dish on the roof.
+
+(The hidden page uses no images intentionally.)
+
+
+============================================================
+TOTAL IMAGES NEEDED: 18 (5 are optional)
+REQUIRED: 13 images
+============================================================

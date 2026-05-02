@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<title>Deep Lake Public Library</title>
+<style>
+body {
+  background-color: #f5f0e8;
+  font-family: Georgia, 'Times New Roman', Times, serif;
+  font-size: 12px;
+  color: #333;
+  margin: 0;
+  padding: 0;
+}
+a { color: #8b4513; }
+a:hover { color: #cc6600; }
+a:visited { color: #5c3317; }
+.wrapper {
+  width: 720px;
+  margin: 0 auto;
+  background-color: #fff;
+  border-left: 1px solid #ccc;
+  border-right: 1px solid #ccc;
+}
+.header {
+  background-color: #2c1810;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.header h1 {
+  font-size: 22px;
+  color: #f0e6d0;
+  margin: 0;
+  font-weight: normal;
+  font-style: italic;
+}
+.header-sub { color: #c0a882; font-size: 11px; }
+.nav {
+  background-color: #5c3317;
+  padding: 5px 20px;
+  font-size: 11px;
+}
+.nav a { color: #f0e6d0; text-decoration: none; margin-right: 15px; }
+.nav a:hover { color: #ffcc66; }
+.content { padding: 20px; }
+.placeholder-img {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #e8ddd0;
+  border: 2px dashed #b0a090;
+  color: #887766;
+  font-size: 9px;
+  font-family: Verdana, sans-serif;
+  text-align: center;
+  padding: 4px;
+}
+.hours-box {
+  float: right;
+  width: 200px;
+  background-color: #faf5ed;
+  border: 1px solid #d4c8b0;
+  padding: 10px;
+  margin: 0 0 15px 15px;
+  font-size: 11px;
+}
+.catalog-search {
+  background-color: #faf5ed;
+  border: 1px solid #d4c8b0;
+  padding: 12px;
+  margin: 15px 0;
+}
+.catalog-search input[type="text"] {
+  font-size: 11px;
+  border: 1px solid #999;
+  padding: 2px 4px;
+  width: 200px;
+}
+.catalog-search input[type="submit"] {
+  font-size: 11px;
+  background-color: #5c3317;
+  color: #fff;
+  border: 1px solid #2c1810;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+table.catalog {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 11px;
+  margin-top: 10px;
+}
+table.catalog th {
+  background-color: #5c3317;
+  color: #fff;
+  padding: 4px 8px;
+  text-align: left;
+  font-size: 10px;
+}
+table.catalog td {
+  padding: 4px 8px;
+  border-bottom: 1px solid #ddd;
+}
+.status-out { color: #cc0000; font-weight: bold; }
+.status-in { color: #006600; }
+.section-head {
+  color: #5c3317;
+  font-size: 15px;
+  border-bottom: 1px solid #d4c8b0;
+  padding-bottom: 4px;
+  margin: 20px 0 10px 0;
+}
+.clipping {
+  background-color: #faf5ed;
+  border: 1px solid #d4c8b0;
+  padding: 10px;
+  margin: 8px 0;
+  font-size: 11px;
+}
+.clipping-date {
+  font-size: 9px;
+  color: #888;
+  font-style: italic;
+}
+.footer {
+  background-color: #2c1810;
+  color: #c0a882;
+  font-size: 9px;
+  padding: 10px 20px;
+  text-align: center;
+}
+.footer a { color: #ddc090; }
+/* tabs */
+.tab-row { display: flex; gap: 0; margin: 15px 0 0 0; }
+.lib-tab {
+  padding: 5px 14px;
+  background-color: #faf5ed;
+  border: 1px solid #d4c8b0;
+  border-bottom: none;
+  cursor: pointer;
+  font-family: Georgia, serif;
+  font-size: 11px;
+  color: #5c3317;
+}
+.lib-tab.active { background-color: #fff; font-weight: bold; }
+.lib-tab:hover { background-color: #f0e8d8; }
+.lib-content { display: none; border: 1px solid #d4c8b0; padding: 15px; }
+.lib-content.active { display: block; }
+</style>
+<script>
+function showLibTab(name) {
+  document.querySelectorAll('.lib-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.lib-content').forEach(t => t.classList.remove('active'));
+  document.querySelector('[data-libtab="'+name+'"]').classList.add('active');
+  document.getElementById('lib-'+name).classList.add('active');
+}
+</script>
+</head>
+<body>
+
+<div class="wrapper">
+
+<div class="header">
+  <img src="images/reading-owl.gif" width="55" height="55" alt="Library Owl" 
+    onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex';">
+  <div class="placeholder-img" style="width:55px;height:55px;display:none;">reading-owl.gif</div>
+  <div>
+    <h1>Deep Lake Public Library</h1>
+    <span class="header-sub">Serving the Deep Lake Community Since 1952</span>
+  </div>
+</div>
+
+<div class="nav">
+  <a href="#" onclick="showLibTab('home');return false;">Home</a>
+  <a href="#" onclick="showLibTab('catalog');return false;">Catalog Search</a>
+  <a href="#" onclick="showLibTab('history');return false;">Local History</a>
+  <a href="#" onclick="showLibTab('programs');return false;">Programs</a>
+</div>
+
+<div class="content">
+
+<!-- TABS -->
+<div class="tab-row">
+  <div class="lib-tab active" data-libtab="home" onclick="showLibTab('home')">Home</div>
+  <div class="lib-tab" data-libtab="catalog" onclick="showLibTab('catalog')">Catalog Search</div>
+  <div class="lib-tab" data-libtab="history" onclick="showLibTab('history')">Local History</div>
+  <div class="lib-tab" data-libtab="programs" onclick="showLibTab('programs')">Programs</div>
+</div>
+
+<!-- HOME -->
+<div id="lib-home" class="lib-content active">
+
+<div class="hours-box">
+  <b>Library Hours</b><br>
+  <hr size="1" color="#d4c8b0">
+  Mon: 10am - 6pm<br>
+  Tue: 10am - 8pm<br>
+  Wed: 10am - 6pm<br>
+  Thu: 10am - 8pm<br>
+  Fri: 10am - 5pm<br>
+  Sat: 10am - 2pm<br>
+  Sun: CLOSED<br>
+  <hr size="1" color="#d4c8b0">
+  <font size="1">245 Oak Street<br>Deep Lake, OR 97701<br>(541) 555-0178</font>
+</div>
+
+<img src="images/library-header.jpg" width="280" height="160" alt="Deep Lake Library Building" 
+  onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+<div class="placeholder-img" style="width:280px;height:160px;display:none;">library-header.jpg<br>(Library Building)</div>
+
+<br><br>
+
+<p>Welcome to the Deep Lake Public Library! We're a small community library with a big heart, serving residents of Deep Lake and surrounding areas since 1952.</p>
+
+<p>Our collection includes over 12,000 volumes, periodicals, audiobooks, and a growing selection of videos and DVDs. We also offer free internet access on two public computers (30-minute sessions, please sign up at the front desk).</p>
+
+<p><b>New!</b> We now have wireless internet available in the reading room. Ask the front desk for the access code.</p>
+
+<div class="section-head">Announcements</div>
+<p><b>Summer Reading Program 2003</b> — Thank you to everyone who participated! 47 children completed the program this year. Special thanks to our volunteers.</p>
+<p><b>Book Sale</b> — Annual book sale will be held October 18, 2003 in the community room. Donations now being accepted.</p>
+
+</div>
+
+<!-- CATALOG SEARCH -->
+<div id="lib-catalog" class="lib-content">
+
+<div class="catalog-search">
+  <b>Search the Library Catalog</b><br><br>
+  Search: <input type="text" value="TV Odyssey"> 
+  in: <select style="font-size:11px;">
+    <option>All Fields</option>
+    <option selected>Title/Subject</option>
+    <option>Author</option>
+  </select>
+  <input type="submit" value="Search" onclick="return false;">
+</div>
+
+<div style="font-size:10px; color:#888;">Search results for: "TV Odyssey" — 1 result found</div>
+
+<table class="catalog">
+<tr>
+  <th>Title</th>
+  <th>Author</th>
+  <th>Call #</th>
+  <th>Year</th>
+  <th>Status</th>
+</tr>
+<tr>
+  <td><b>Voices on the Air: A History of Local Broadcasting in Central Oregon</b></td>
+  <td>Marguerite Hale</td>
+  <td>384.54 HAL</td>
+  <td>1998</td>
+  <td class="status-out">CHECKED OUT</td>
+</tr>
+</table>
+
+<div style="background-color:#fff8f0; border:1px solid #e0c0a0; padding:10px; margin-top:10px; font-size:11px;">
+  <b>Item Details:</b><br>
+  <b>Title:</b> Voices on the Air: A History of Local Broadcasting in Central Oregon<br>
+  <b>Author:</b> Hale, Marguerite<br>
+  <b>Publisher:</b> Cascade Press, Bend, OR<br>
+  <b>Year:</b> 1998<br>
+  <b>Pages:</b> 243 pp.<br>
+  <b>Subjects:</b> Broadcasting — Oregon — History; Television stations — Central Oregon; Radio — Oregon<br>
+  <b>Call Number:</b> 384.54 HAL<br>
+  <b>Status:</b> <span class="status-out">CHECKED OUT</span><br>
+  <b>Due Date:</b> 03/15/1999<br>
+  <b>Borrower:</b> <i>[field blank]</i><br>
+  <b>Notes:</b> Reference copy. In-library use only. <span style="color:#cc0000;">** OVERDUE — 1,694 days **</span>
+</div>
+
+<br>
+<div style="font-size:10px; color:#888; border-top:1px dotted #ccc; padding-top:8px;">
+  No other results found for "TV Odyssey." Try broadening your search or ask the librarian for assistance.
+</div>
+
+<!-- Additional searches -->
+<br>
+<div class="catalog-search">
+  <b>Additional Search</b><br><br>
+  Search: <input type="text" value="Ray Calloway"> 
+  in: <select style="font-size:11px;">
+    <option>All Fields</option>
+    <option>Title/Subject</option>
+    <option selected>Author</option>
+  </select>
+  <input type="submit" value="Search" onclick="return false;">
+</div>
+
+<div style="font-size:10px; color:#888;">Search results for author: "Ray Calloway" — 0 results found</div>
+
+<br>
+<div class="catalog-search">
+  <b>Additional Search</b><br><br>
+  Search: <input type="text" value="Deep Lake history"> 
+  in: <select style="font-size:11px;">
+    <option>All Fields</option>
+    <option selected>Title/Subject</option>
+    <option>Author</option>
+  </select>
+  <input type="submit" value="Search" onclick="return false;">
+</div>
+
+<div style="font-size:10px; color:#888;">Search results for: "Deep Lake history" — 3 results found</div>
+
+<table class="catalog">
+<tr>
+  <th>Title</th>
+  <th>Author</th>
+  <th>Call #</th>
+  <th>Year</th>
+  <th>Status</th>
+</tr>
+<tr>
+  <td>Deep Lake: A Pictorial History</td>
+  <td>Deep Lake Historical Society</td>
+  <td>979.5 DEE</td>
+  <td>1976</td>
+  <td class="status-in">AVAILABLE</td>
+</tr>
+<tr>
+  <td>Voices on the Air: A History of Local Broadcasting in Central Oregon</td>
+  <td>Marguerite Hale</td>
+  <td>384.54 HAL</td>
+  <td>1998</td>
+  <td class="status-out">CHECKED OUT</td>
+</tr>
+<tr>
+  <td>Cascade Country: Towns of the Oregon Interior</td>
+  <td>Wallace Reed</td>
+  <td>917.95 REE</td>
+  <td>1985</td>
+  <td class="status-in">AVAILABLE</td>
+</tr>
+</table>
+
+</div>
+
+<!-- LOCAL HISTORY -->
+<div id="lib-history" class="lib-content">
+
+<div class="section-head">Local History Collection</div>
+<p>The Deep Lake Public Library maintains a collection of local historical documents, newspapers, and photographs. Below are selected digitized items from our archive.</p>
+
+<p style="font-size:10px; color:#888;"><i>Digitization project funded by Oregon State Library Foundation, 2001. Scanning ongoing — check back for new additions.</i></p>
+
+<div class="section-head" style="font-size:13px;">Newspaper Clippings</div>
+
+<div class="clipping">
+  <b>New Business Brings Jobs to Deep Lake</b><br>
+  <span class="clipping-date">Deep Lake Gazette, March 4, 1992</span>
+  <p>A new feed supply store opened its doors on Main Street this week, bringing five full-time jobs to the community. Owner Bill Henderson said he chose Deep Lake because "it's a good town with good people who still know their neighbors."</p>
+</div>
+
+<div class="clipping">
+  <b>Record Snowfall Closes Schools</b><br>
+  <span class="clipping-date">Deep Lake Gazette, January 18, 1994</span>
+  <p>Deep Lake received 14 inches of snow overnight Tuesday, prompting school closures and hazardous driving conditions throughout the area. Road crews worked through the night to clear Route 7 and major thoroughfares.</p>
+</div>
+
+<div class="clipping">
+  <b>FCC Application Filed for Local Television Station</b><br>
+  <span class="clipping-date">Deep Lake Gazette, September 8, 1983</span>
+  <p>An application for a low-power television broadcast license has been filed with the Federal Communications Commission for a proposed station in Deep Lake. The application, filed by WDLK Broadcasting Inc., lists <b>Raymond Calloway</b> of <b>Lakeview Holdings</b> as principal officer. The proposed station would broadcast on UHF channel 34 and serve the Deep Lake and surrounding communities. A public comment period is open through October 15.</p>
+</div>
+
+<div class="clipping">
+  <b>Deep Lake Elks Lodge Hosts Annual Pancake Breakfast</b><br>
+  <span class="clipping-date">Deep Lake Gazette, April 22, 1995</span>
+  <p>Over 200 residents attended the annual Elks Lodge pancake breakfast last Saturday, raising $1,400 for the Deep Lake Volunteer Fire Department. Lodge president Tom Weaver called it "the best turnout we've ever had."</p>
+</div>
+
+<div class="clipping">
+  <b>Three Families Relocate in Same Month</b><br>
+  <span class="clipping-date">Deep Lake Gazette, June 30, 1993</span>
+  <p>Three Deep Lake families have relocated out of the area within the month of June, according to postal forwarding records. While small towns see regular turnover, longtime residents noted the unusual coincidence. "People just picked up and left," said neighbor Dorothy Marsh. "Didn't even say goodbye." None of the families could be reached for comment. The homes are expected to be listed for sale through local realtors.</p>
+</div>
+
+<div class="clipping">
+  <b>Community Newsletter Archive</b><br>
+  <span class="clipping-date">Various dates, 1988-1997</span>
+  <p><i>The Deep Lake Community Newsletter was published quarterly from 1988 to 1997. The library held a complete archive in the reference section.</i></p>
+  <p style="color:#cc0000; font-size:10px;"><b>NOTE:</b> Volumes for 1991-1993 are currently missing from the archive. If you have copies, please contact the library. Last seen in collection: approximately 2001.</p>
+</div>
+
+</div>
+
+<!-- PROGRAMS -->
+<div id="lib-programs" class="lib-content">
+
+<div class="section-head">Library Programs</div>
+
+<p><b>Story Time</b> — Wednesdays at 10:30am for children ages 3-6. Join Miss Nancy for stories, songs, and crafts!</p>
+
+<p><b>Book Club</b> — First Thursday of each month, 7:00pm. Currently reading: <i>The Kite Runner</i> by Khaled Hosseini. New members welcome.</p>
+
+<p><b>Internet Help</b> — Need help using the internet or email? Stop by on Tuesday afternoons for one-on-one assistance with our volunteer tech helpers.</p>
+
+<p><b>Summer Reading Program</b> — Returns June 2004! Watch for details.</p>
+
+</div>
+
+</div><!-- content -->
+
+<div class="footer">
+  Deep Lake Public Library &bull; 245 Oak Street &bull; Deep Lake, OR 97701 &bull; (541) 555-0178<br>
+  &copy; 2002 Deep Lake Public Library &bull; Website by <a href="#">Oregon Library Network</a><br>
+  <i>This site best viewed at 800x600 resolution</i>
+</div>
+
+</div><!-- wrapper -->
+
+</body>
+</html>

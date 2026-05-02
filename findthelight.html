@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<title>FIND THE LIGHT — Deep Lake Oregon: What They Don't Want You To Know</title>
+<style>
+body {
+  background-color: #000;
+  color: #33ff33;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  margin: 0;
+  padding: 0;
+  line-height: 1.6;
+}
+a { color: #ffff00; }
+a:hover { color: #ff3333; text-decoration: none; }
+a:visited { color: #cccc00; }
+
+.wrapper {
+  width: 760px;
+  margin: 0 auto;
+  padding: 10px;
+}
+.flame-border {
+  border-left: 20px solid transparent;
+  border-right: 20px solid transparent;
+  border-image: repeating-linear-gradient(
+    to bottom,
+    #ff4400 0px,
+    #ff8800 8px,
+    #ffcc00 16px,
+    #ff4400 24px
+  ) 20;
+  padding: 0 15px;
+}
+.site-title {
+  font-size: 32px;
+  color: #ff3333;
+  text-align: center;
+  font-weight: bold;
+  letter-spacing: 4px;
+  text-shadow: 0 0 10px #ff0000, 0 0 20px #ff0000;
+  padding: 20px 0 5px 0;
+}
+.site-subtitle {
+  text-align: center;
+  color: #ffff00;
+  font-size: 14px;
+  font-style: italic;
+  padding-bottom: 15px;
+}
+.nav-links {
+  text-align: center;
+  padding: 8px;
+  border-top: 1px solid #33ff33;
+  border-bottom: 1px solid #33ff33;
+  margin: 10px 0;
+}
+.nav-links a {
+  margin: 0 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+.section-header {
+  color: #ff3333;
+  font-size: 18px;
+  font-weight: bold;
+  border-bottom: 2px solid #ff3333;
+  padding: 15px 0 5px 0;
+  margin-top: 25px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+.evidence-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin: 15px 0;
+}
+.evidence-item {
+  border: 1px solid #33ff33;
+  padding: 8px;
+  width: 160px;
+  text-align: center;
+}
+.evidence-item img {
+  display: block;
+}
+.placeholder-img {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #0a1a0a;
+  border: 2px dashed #33ff33;
+  color: #33ff33;
+  font-size: 9px;
+  font-family: 'Courier New', monospace;
+  text-align: center;
+  padding: 8px;
+  box-sizing: border-box;
+}
+.blink {
+  animation: blink 1s step-end infinite;
+}
+@keyframes blink {
+  50% { opacity: 0; }
+}
+.update-log {
+  border: 1px solid #336633;
+  background-color: #001100;
+  padding: 10px;
+  margin: 15px 0;
+  font-size: 10px;
+}
+.email-link {
+  color: #33ff33;
+  text-decoration: underline;
+}
+.counter {
+  text-align: center;
+  font-size: 10px;
+  color: #666;
+  padding: 20px 0;
+  border-top: 1px solid #333;
+}
+.redacted {
+  background-color: #33ff33;
+  color: #33ff33;
+}
+.warning-box {
+  border: 3px solid #ff0000;
+  background-color: #1a0000;
+  padding: 15px;
+  margin: 15px 0;
+  text-align: center;
+  color: #ff3333;
+  font-weight: bold;
+}
+/* tab system */
+.tab-row { display: flex; gap: 0; margin-top: 20px; flex-wrap: wrap; }
+.ftl-tab {
+  padding: 6px 12px;
+  background-color: #001a00;
+  border: 1px solid #33ff33;
+  border-bottom: none;
+  cursor: pointer;
+  color: #33ff33;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  font-weight: bold;
+}
+.ftl-tab.active { background-color: #0a2a0a; color: #ffff00; }
+.ftl-tab:hover { background-color: #0a2a0a; }
+.ftl-content { display: none; border: 1px solid #33ff33; padding: 15px; background-color: #0a0a0a; }
+.ftl-content.active { display: block; }
+</style>
+<script>
+function showFTLTab(name) {
+  document.querySelectorAll('.ftl-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.ftl-content').forEach(t => t.classList.remove('active'));
+  document.querySelector('[data-ftltab="'+name+'"]').classList.add('active');
+  document.getElementById('ftl-'+name).classList.add('active');
+}
+</script>
+</head>
+<body>
+
+<div class="wrapper">
+<div class="flame-border">
+
+<div class="site-title">&#9888; FIND THE LIGHT &#9888;</div>
+<div class="site-subtitle">DEEP LAKE, OREGON: WHAT THEY DON'T WANT YOU TO KNOW</div>
+<div style="text-align:center; font-size:10px; color:#666;">
+  Est. 1999 &bull; Maintained by GERALD K. PFISTER &bull; Last updated: 11/02/2003
+</div>
+
+<div class="nav-links">
+  <a href="#" onclick="showFTLTab('home');return false;">HOME</a>
+  <a href="#" onclick="showFTLTab('evidence');return false;">THE EVIDENCE</a>
+  <a href="#" onclick="showFTLTab('timeline');return false;">TIMELINE</a>
+  <a href="#" onclick="showFTLTab('wdlk');return false;">WDLK STATION</a>
+  <a href="#" onclick="showFTLTab('contact');return false;">CONTACT</a>
+</div>
+
+<!-- HOME TAB -->
+<div class="tab-row">
+  <div class="ftl-tab active" data-ftltab="home" onclick="showFTLTab('home')">HOME</div>
+  <div class="ftl-tab" data-ftltab="evidence" onclick="showFTLTab('evidence')">THE EVIDENCE</div>
+  <div class="ftl-tab" data-ftltab="timeline" onclick="showFTLTab('timeline')">TIMELINE</div>
+  <div class="ftl-tab" data-ftltab="wdlk" onclick="showFTLTab('wdlk')">WDLK STATION</div>
+  <div class="ftl-tab" data-ftltab="contact" onclick="showFTLTab('contact')">CONTACT</div>
+</div>
+
+<div id="ftl-home" class="ftl-content active">
+
+<div class="warning-box">
+  <span class="blink">&#9888; WARNING &#9888;</span><br><br>
+  IF YOU ARE READING THIS FROM DEEP LAKE — THEY KNOW.<br>
+  CLEAR YOUR BROWSER HISTORY. USE A LIBRARY COMPUTER.
+</div>
+
+<div class="section-header">WHAT IS DEEP LAKE?</div>
+
+<p>
+To the outside world, Deep Lake, Oregon is a quiet mountain town of roughly 4,200 people. Nothing special. Nothing worth looking at. That's exactly what they want you to think.
+</p>
+
+<p>
+I grew up 40 miles from Deep Lake. I had a cousin who lived there in the early 90s. She told me things. Things about a television station that broadcast programs nobody had ever heard of. Programs that weren't listed in any TV guide. Programs that children watched while their parents were at work. Programs that <b>changed things</b>.
+</p>
+
+<p>
+My cousin moved away in 1994. She doesn't remember any of this. She doesn't remember telling me. She doesn't remember much of anything from those years. She's not the only one.
+</p>
+
+<p>
+I have spent FOUR YEARS researching Deep Lake. What I've found points to one of three possibilities:
+</p>
+
+<p style="color:#ffff00;">
+1. MKULTRA SUBPROJECT — Deep Lake was a test site for a CIA subliminal programming experiment using local broadcast television as a delivery mechanism. The programs were designed to test suggestibility and memory manipulation in children. (60% confidence)<br><br>
+2. DARPA FREQUENCY EXPERIMENT — The WDLK broadcast tower was emitting a non-standard carrier frequency alongside normal programming. This frequency affected neural development in children exposed over time. The "shows" were cover for the real payload: the signal itself. (25% confidence)<br><br>
+3. CORPORATE BLACK SITE — An unnamed defense contractor used Deep Lake as an isolated testing ground for a technology I don't fully understand. The station was a front. The programming was a byproduct. The real operation was underground. (15% confidence)
+</p>
+
+<p>
+I know how this sounds. I know you're probably thinking "another conspiracy nut." That's fine. Read the evidence. Make up your own mind. But answer me this: if TV Odyssey was just a normal public access channel, why does the FCC have NO RECORD of its broadcast license? Why does every child who watched it have gaps in their memory? And why is the station building still standing, maintained by NOBODY, owned by a holding company registered in <span class="redacted">REDACTED</span>, Delaware?
+</p>
+
+<div class="update-log">
+  <b>SITE UPDATES:</b><br>
+  11/02/2003 — Added new photo to evidence page (tower detail)<br>
+  08/19/2003 — Received anonymous email. Working on verification. More soon.<br>
+  05/04/2003 — Timeline updated with new dates<br>
+  02/11/2003 — Someone tried to get this site taken down. I have backups. Nice try.<br>
+  12/25/2002 — Merry Christmas. They're still watching.<br>
+  09/30/2002 — New evidence photos uploaded<br>
+  06/15/2002 — Site launched. The truth starts here.
+</div>
+
+</div>
+
+<!-- THE EVIDENCE TAB -->
+<div id="ftl-evidence" class="ftl-content">
+
+<div class="section-header">THE EVIDENCE</div>
+
+<p>
+Below is everything I've collected. Judge for yourself. Click images to enlarge. (Note: some images are low quality. I work with what I can get.)
+</p>
+
+<div class="evidence-grid">
+  <div class="evidence-item">
+    <img src="images/broadcast-tower.jpg" width="160" height="120" alt="Tower" 
+      onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+    <div class="placeholder-img" style="width:160px;height:120px;display:none;">broadcast-tower.jpg<br>(Tower Photo)</div>
+    <br><font size="1">WDLK broadcast tower. Note equipment at top — this is NOT standard broadcast hardware. Multiple arrays, non-standard dish configuration. What is this?</font>
+  </div>
+
+  <div class="evidence-item">
+    <img src="images/evidence-photo-1.jpg" width="160" height="120" alt="Station exterior" 
+      onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+    <div class="placeholder-img" style="width:160px;height:120px;display:none;">evidence-photo-1.jpg<br>(Station Exterior)</div>
+    <br><font size="1">WDLK station building, taken from road. Building appears maintained despite being "abandoned." Note: windows are intact. Someone is keeping this up.</font>
+  </div>
+
+  <div class="evidence-item">
+    <img src="images/evidence-photo-2.jpg" width="160" height="120" alt="Lake at night" 
+      onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+    <div class="placeholder-img" style="width:160px;height:120px;display:none;">evidence-photo-2.jpg<br>(Night Photo)</div>
+    <br><font size="1">Taken from east shore of Deep Lake, 2:30 AM, Sept 2002. Light source unknown. Not reflected — originating FROM the water? More investigation needed.</font>
+  </div>
+
+  <div class="evidence-item">
+    <img src="images/evidence-photo-3.jpg" width="160" height="120" alt="Document" 
+      onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+    <div class="placeholder-img" style="width:160px;height:120px;display:none;">evidence-photo-3.jpg<br>(Scanned Document)</div>
+    <br><font size="1">Partial document obtained through FOIA. Most of it is redacted. Header appears to be Department of <span class="redacted">XXXXX</span>. Mentions "Project" and "broadcast" in visible text. Date: 1987.</font>
+  </div>
+</div>
+
+<p>
+Additional evidence I cannot post online for legal reasons. If you're a journalist or researcher, <a href="#">contact me</a> for the full file.
+</p>
+
+<p style="color:#ff3333;">
+NOTE: Three of my evidence photos were corrupted in August 2003. I had backups, but the backups were ALSO corrupted. Same three photos. Different hard drive. Different physical location. Draw your own conclusions.
+</p>
+
+</div>
+
+<!-- TIMELINE TAB -->
+<div id="ftl-timeline" class="ftl-content">
+
+<div class="section-header">TIMELINE</div>
+
+<p style="color:#ffff00;">All dates approximate unless noted. Sources vary.</p>
+
+<pre style="color:#33ff33; font-size:11px; line-height: 1.8;">
+1983 (?) — WDLK station building constructed on Route 7, Deep Lake.
+            Contractor: unknown. No building permits on file at county
+            office. (I checked. Twice.)
+
+1984      — First known TV Odyssey broadcasts. Programming appears
+            on channel 34. No announcement, no launch event. It's
+            just suddenly THERE.
+
+1984-1996 — Continuous broadcasting. Mix of original programming:
+            children's cartoons, educational shows, locally-produced
+            movies, talk shows. All original content. None of it
+            registered with any copyright office.
+
+1987      — FOIA document (see Evidence page) dated this year.
+            Only confirmed government document mentioning anything
+            related.
+
+1989      — First reported "incident" I can verify. A family on
+            Spruce Street reports their <span class="redacted">XXXXXXX</span> to police.
+            Case closed in 48 hours. No follow-up.
+
+1991      — Ray Calloway becomes station manager (?). Name appears
+            on utility bills for the station starting this year.
+            No public record of a "Ray Calloway" existing in Oregon
+            before 1991. No birth certificate. No SSN match. WHO
+            IS RAY CALLOWAY?
+
+1993      — Three families leave Deep Lake within the same month.
+            No forwarding addresses. Homes sold at a loss.
+
+1996      — TV Odyssey goes off the air. No final broadcast, no
+            sign-off. Channel 34 goes to static. Nobody officially
+            acknowledges it was ever there.
+
+1996-2004 — Station building remains standing. Ownership transferred
+            to "Lakeview Holdings LLC." Registered in Delaware.
+            No employees. No revenue. No physical office.
+            They pay the property tax. Every year. On time.
+
+1999      — This website launched. I start getting emails almost
+            immediately. Some helpful. Some threatening.
+
+2002      — Someone on a web forum (TVOdysseyFans.net) claims to
+            have found a tape. Thread deleted within 24 hours.
+            I could not reach the user.
+
+2003      — Anonymous email: "You're closer than you think.
+            Stop looking at the sky. Look at the ground."
+            I don't know what this means yet.
+</pre>
+
+</div>
+
+<!-- WDLK STATION TAB -->
+<div id="ftl-wdlk" class="ftl-content">
+
+<div class="section-header">WDLK STATION — WHAT WE KNOW</div>
+
+<p>
+The WDLK building sits at <b>14200 Route 7, Deep Lake, OR</b>. Single-story commercial structure with a broadcast tower approximately 180 feet tall on the north side of the property.
+</p>
+
+<p>
+Here's what doesn't make sense about this building:
+</p>
+
+<p>
+<b>1. THE LICENSE:</b> The call letters "WDLK" follow east-of-the-Mississippi convention (W-prefix). Oregon stations should use K-prefix. This is not a minor error. This is a federal regulation. Every legitimate station in Oregon starts with K. WDLK is either not legitimate or was deliberately assigned incorrect call letters. Either way, the FCC has no record of it.
+</p>
+
+<p>
+<b>2. THE TOWER:</b> The broadcast tower has equipment on it that I cannot identify and I have been an amateur radio operator for 22 years. Standard UHF/VHF broadcast antennas are well-documented. The arrays on the WDLK tower don't match any commercial broadcast configuration I can find. There are at least three dish-like structures that are aimed DOWNWARD. Broadcast dishes point at the horizon or at satellites. These point at the ground. At Deep Lake itself.
+</p>
+
+<p>
+<b>3. THE POWER:</b> The station building still draws power. I confirmed this with a source at the county utility office. The account is current. It's billed to Lakeview Holdings LLC. The monthly usage is consistent with a building that is running equipment — not an empty structure with a security light. Something in that building is ON.
+</p>
+
+<p>
+<b>4. RAY CALLOWAY:</b> I have found exactly one photograph that may show Ray Calloway. It's from a 1992 Deep Lake Community Newsletter (scanned at the library before they "lost" that volume). A group photo at a town picnic. The caption lists names. One of them is R. Calloway. The man in the photo is looking away from the camera. Every other person is facing forward. I cannot confirm this is the same Ray Calloway from the station utility bills because <b>Ray Calloway does not appear to exist outside of Deep Lake.</b>
+</p>
+
+<p style="color:#ff3333;">
+I have attempted to enter the building twice. The first time, the doors were locked with hardware that looked new — not 1996 abandoned-building locks. The second time, a <span class="redacted">REDACTED</span> county sheriff's vehicle pulled into the lot within four minutes of my arrival. I was told I was trespassing on private property. I left. I have not been back.
+</p>
+
+</div>
+
+<!-- CONTACT TAB -->
+<div id="ftl-contact" class="ftl-content">
+
+<div class="section-header">CONTACT</div>
+
+<p>
+If you have information about Deep Lake, TV Odyssey, WDLK, Ray Calloway, or Lakeview Holdings LLC, I want to hear from you.
+</p>
+
+<p>
+Email: <a href="mailto:gerald@findthelight.org" class="email-link">gerald@findthelight.org</a>
+</p>
+
+<p>
+PGP key available on request. I recommend encrypting sensitive communications.
+</p>
+
+<p>
+If you are a former resident of Deep Lake: I know what you're going through. The memory gaps are real. You are not crazy. Reach out. We can figure this out together.
+</p>
+
+<p>
+If you are affiliated with any government agency or Lakeview Holdings LLC: I have copies of everything in multiple locations. Taking this site down will not help you.
+</p>
+
+<p style="color:#666; font-size:10px;">
+NOTE TO LAW ENFORCEMENT: Everything on this website is protected speech under the First Amendment. All photographs were taken from public roads. No laws were broken in the creation of this site. I have consulted with an attorney. Don't bother.
+</p>
+
+</div>
+
+<div class="counter">
+  visitors since june 2002: 1,247<br>
+  <span style="color:#333;">you are being watched. but so are they.</span>
+</div>
+
+</div><!-- flame-border -->
+</div><!-- wrapper -->
+
+</body>
+</html>
