@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<title>Google</title>
+<style>
+body {
+  background-color: #ffffff;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 13px;
+  color: #000;
+  margin: 0;
+  padding: 0;
+}
+a { color: #0000cc; text-decoration: none; }
+a:visited { color: #551a8b; }
+a:hover { text-decoration: underline; }
+
+.top-links {
+  text-align: right;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.top-links a { margin-left: 4px; }
+
+.center {
+  text-align: center;
+  margin-top: 70px;
+}
+
+/* 2004-era Google wordmark, rendered in CSS so the gateway is fully self-contained */
+.logo {
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 78px;
+  font-weight: bold;
+  letter-spacing: -3px;
+  line-height: 1;
+  text-shadow: 2px 2px 0 #c8c8c8;
+  margin-bottom: 4px;
+}
+.logo .b1 { color: #0039b6; }
+.logo .r  { color: #c41200; }
+.logo .y  { color: #f3b300; }
+.logo .b2 { color: #0039b6; }
+.logo .g  { color: #30a72f; }
+.logo .r2 { color: #c41200; }
+
+.tagline {
+  font-size: 11px;
+  color: #555;
+  margin-bottom: 22px;
+}
+
+form { margin: 0; }
+
+.searchbox {
+  border: 1px solid #7e9db9;
+  padding: 1px;
+  width: 460px;
+  display: inline-block;
+}
+.searchbox input[type="text"] {
+  border: 0;
+  outline: 0;
+  font-family: Arial, sans-serif;
+  font-size: 16px;
+  width: 100%;
+  padding: 3px 4px;
+  box-sizing: border-box;
+}
+
+.buttons {
+  margin-top: 14px;
+}
+.buttons input[type="submit"] {
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+  background-color: #ececec;
+  border: 1px solid #b0b0b0;
+  padding: 3px 12px;
+  margin: 0 3px;
+  cursor: pointer;
+  color: #000;
+}
+.buttons input[type="submit"]:hover {
+  border-color: #777;
+}
+
+.tabs {
+  width: 460px;
+  margin: 0 auto;
+  text-align: left;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #c0c0c0;
+  font-size: 11px;
+  color: #777;
+}
+.tabs span.active { color: #000; font-weight: bold; }
+.tabs span { margin-right: 14px; cursor: default; }
+
+.adv-line {
+  font-size: 11px;
+  color: #777;
+  margin-top: 14px;
+}
+.adv-line a { color: #0000cc; }
+
+.lang-line {
+  font-size: 11px;
+  margin-top: 26px;
+  color: #555;
+}
+
+.footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 14px 0 18px;
+  text-align: center;
+  font-size: 11px;
+  color: #555;
+  border-top: 1px solid #e8e8e8;
+  background-color: #fff;
+}
+.footer a { color: #0000cc; }
+.footer .copy { color: #777; margin-top: 2px; font-size: 10px; }
+
+/* results page */
+.results {
+  max-width: 720px;
+  margin: 24px auto 80px;
+  padding: 0 16px;
+}
+.results-bar {
+  background: linear-gradient(to bottom, #e8eefa, #c2d2ee);
+  border: 1px solid #a4b8d6;
+  font-size: 11px;
+  padding: 4px 8px;
+  color: #333;
+  margin-bottom: 18px;
+}
+.results-bar .mini-logo {
+  font-family: 'Times New Roman', serif;
+  font-weight: bold;
+  font-size: 20px;
+  letter-spacing: -1px;
+  vertical-align: middle;
+  margin-right: 10px;
+}
+.results-bar .mini-logo .b1 { color: #0039b6; }
+.results-bar .mini-logo .r  { color: #c41200; }
+.results-bar .mini-logo .y  { color: #f3b300; }
+.results-bar .mini-logo .b2 { color: #0039b6; }
+.results-bar .mini-logo .g  { color: #30a72f; }
+.results-bar .mini-logo .r2 { color: #c41200; }
+.results-bar form { display: inline-block; }
+.results-bar .searchbox { width: 380px; vertical-align: middle; }
+
+.result {
+  margin: 14px 0 18px;
+}
+.result .title { font-size: 16px; }
+.result .title a { color: #0000cc; }
+.result .url   { font-size: 13px; color: #008000; }
+.result .snippet { font-size: 13px; color: #000; line-height: 1.45; }
+
+.no-results {
+  border-top: 1px solid #e8e8e8;
+  padding-top: 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #333;
+}
+.no-results .quoted { color: #c41200; font-weight: bold; }
+.suggest { margin-top: 10px; }
+.suggest a { font-style: italic; }
+
+/* Bookmarks bar — shown only when at least one site has been visited.
+   Styled like a 2004-era browser bookmarks toolbar / Google personalized strip. */
+#bookmarks-bar {
+  display: none;
+  background: linear-gradient(to bottom, #fffbe2, #fff1b8);
+  border-bottom: 1px solid #d8c66a;
+  padding: 4px 12px;
+  font-size: 11px;
+  color: #444;
+}
+#bookmarks-bar .bm-label {
+  font-weight: bold;
+  color: #806000;
+  margin-right: 8px;
+}
+#bookmarks-bar .bm-label .star { color: #c89000; margin-right: 2px; }
+#bookmarks-bar a.bm-link {
+  color: #0000cc;
+  margin-right: 12px;
+  white-space: nowrap;
+}
+#bookmarks-bar a.bm-clear {
+  float: right;
+  color: #806000;
+  font-size: 10px;
+}
+</style>
+<script>
+// All sites the search index knows about. The slug must match the .html filename.
+// `keys` is the list of player-facing names that should resolve to this site.
+// Names are matched after normalization (lowercase + strip everything except a-z0-9),
+// so "Jakes page", "jakes-page", and "jakespage" all map to the same entry.
+var SITES = [
+  {
+    slug: 'deeplakoregon',
+    display: 'Deep Lake, Oregon',
+    title: 'Welcome to Deep Lake, Oregon - Official City Website',
+    url:   'www.deeplakoregon.com',
+    snippet: 'The official city website of Deep Lake, Oregon. Population, mayor, parks, town hall hours, community announcements and visitor information.',
+    keys: ['deeplakeoregon', 'deeplakeoregoncom', 'deeplake', 'deeplakcity', 'deeplakeoregonofficial', 'deeplakoregon', 'cityofdeeplake', 'deeplakeoregonofficialwebsite']
+  },
+  {
+    slug: 'tvodysseyfans',
+    display: 'TV Odyssey Fans',
+    title: 'TV Odyssey Fans :: Index',
+    url:   'www.tvodysseyfans.net',
+    snippet: 'Fan forum for the lost public-access show TV Odyssey out of Deep Lake, Oregon. Episode discussion, tape trading, show identification. "Remember What They Don\'t Want You To."',
+    keys: ['tvodysseyfans', 'tvodysseyfansnet', 'tvodyssey', 'tvodysseyfanforum', 'tvodysseyforum', 'odysseyfans', 'tvodysseyfanssite']
+  },
+  {
+    slug: 'findthelight',
+    display: 'Find The Light',
+    title: "FIND THE LIGHT — Deep Lake Oregon: What They Don't Want You To Know",
+    url:   'www.findthelight.org',
+    snippet: 'Independent research into Deep Lake, the WDLK broadcast tower, and the disappearances. Photos, scanned documents, and witness reports.',
+    keys: ['findthelight', 'findthelightorg', 'findthelightdeeplake', 'findlight']
+  },
+  {
+    slug: 'propertyrecords',
+    display: 'Oregon Property Records',
+    title: 'Oregon Property Records — Public Access Database',
+    url:   'records.oregon.gov/property',
+    snippet: 'Search Oregon county property records. Parcel ownership, deed transfers, tax assessment history. Public access database maintained by the State of Oregon.',
+    keys: ['oregonpropertyrecords', 'propertyrecords', 'oregonpropertyrecordsgov', 'oregonproperty', 'propertyrecordsoregon', 'oregonparcelrecords']
+  },
+  {
+    slug: 'library',
+    display: 'Deep Lake Public Library',
+    title: 'Deep Lake Public Library',
+    url:   'www.deeplakelibrary.org',
+    snippet: 'Hours, catalog, and local history archive for the Deep Lake Public Library. Microfilm of the Klamath Herald, town newspaper clippings, and reading programs.',
+    keys: ['deeplakelibrary', 'deeplakepubliclibrary', 'deeplakelibraryorg', 'deeplakelib', 'library', 'publiclibrarydeeplake']
+  },
+  {
+    slug: 'jakes-page',
+    display: "Jake's Deep Lake Page",
+    title: "~*~ Jake's Deep Lake Page ~*~",
+    url:   'www.geocities.com/Heartland/Meadows/4412/',
+    snippet: "Hi I'm Jake! This is my homepage about Deep Lake. Skateboarding, my dog Buster, and weird stuff I've seen around town. Sign my guestbook!",
+    keys: ['jakespage', 'jakesdeeplakepage', 'jakeshomepage', 'jakegeocities', 'jakespageontheweb', 'jakeshome']
+  },
+  {
+    slug: 'wdlk-tv',
+    display: 'WDLK-TV',
+    title: 'WDLK-TV — TV Odyssey — Deep Lake, Oregon',
+    url:   'www.wdlk-tv.com',
+    snippet: 'Official station page for WDLK-TV, broadcasting "TV Odyssey" and other community programming to the Deep Lake area on UHF 47.',
+    keys: ['wdlktv', 'wdlk', 'wdlktvcom', 'wdlktelevision', 'wdlkstation', 'wdlktvdeeplake', 'wdlktvodyssey']
+  },
+
+  /* ----------------------------------------------------------------
+     HIDDEN / IP-ONLY SITES
+     These never appear in search results or "did you mean" suggestions.
+     They resolve only when the player types the exact in-universe LAN
+     IP into the gateway. See README.md for the GM index.
+     ---------------------------------------------------------------- */
+  {
+    slug: 'ccsb-internal',
+    display: '192.168.4.27',
+    title: 'CCSB — Internal Account Management System',
+    url:   '192.168.4.27',
+    snippet: '',
+    hidden: true,
+    keys: ['192168427']
+  },
+  {
+    slug: 'wdlk-terminal',
+    display: '10.0.14.182',
+    title: 'WDLK-SYS',
+    url:   '10.0.14.182',
+    snippet: '',
+    hidden: true,
+    keys: ['10014182']
+  }
+];
+
+function normalize(s) {
+  return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function findSite(query) {
+  var n = normalize(query);
+  if (!n) return null;
+  for (var i = 0; i < SITES.length; i++) {
+    var s = SITES[i];
+    // Hidden sites only resolve through their explicit keys (their LAN IP),
+    // never through their slug. That way a player can't reach an IP-only
+    // page by guessing its filename.
+    if (!s.hidden && normalize(s.slug) === n) return s;
+    for (var j = 0; j < s.keys.length; j++) {
+      if (normalize(s.keys[j]) === n) return s;
+    }
+  }
+  return null;
+}
+
+function getQuery() {
+  var q = window.location.search;
+  if (!q) return '';
+  q = q.replace(/^\?/, '');
+  var parts = q.split('&');
+  for (var i = 0; i < parts.length; i++) {
+    var kv = parts[i].split('=');
+    if (kv[0] === 'q') {
+      try { return decodeURIComponent((kv[1] || '').replace(/\+/g, ' ')); }
+      catch (e) { return (kv[1] || '').replace(/\+/g, ' '); }
+    }
+  }
+  return '';
+}
+
+function htmlEscape(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function renderResults() {
+  var q = getQuery();
+  if (!q) return; // home view stays as-is
+  document.getElementById('home').style.display = 'none';
+  var resultsEl = document.getElementById('results');
+  resultsEl.style.display = 'block';
+  document.getElementById('q-results').value = q;
+
+  var match = findSite(q);
+  if (match) {
+    // Auto-redirect on hit so the gateway behaves like a search-bar address bar.
+    window.location.replace(match.slug + '.html');
+    return;
+  }
+
+  // No hit: show 2004-Google-style "did not match any documents" page.
+  var safe = htmlEscape(q);
+  var html = '' +
+    '<div class="no-results">' +
+      'Your search - <span class="quoted">' + safe + '</span> - did not match any documents.' +
+      '<br><br>' +
+      'Suggestions:' +
+      '<ul>' +
+        '<li>Make sure all words are spelled correctly.</li>' +
+        '<li>Try different keywords.</li>' +
+        '<li>Try the full site name (e.g. <i>DeepLakeOregon</i>, <i>TV Odyssey Fans</i>).</li>' +
+      '</ul>' +
+    '</div>';
+  document.getElementById('results-body').innerHTML = html;
+}
+
+var BOOKMARKS_KEY = 'arg_bookmarks_v1';
+
+function loadBookmarks() {
+  try {
+    var raw = localStorage.getItem(BOOKMARKS_KEY);
+    if (!raw) return [];
+    var list = JSON.parse(raw);
+    if (!Array.isArray(list)) return [];
+    return list.filter(function(s){ return typeof s === 'string'; });
+  } catch (e) { return []; }
+}
+
+function siteBySlug(slug) {
+  for (var i = 0; i < SITES.length; i++) {
+    if (SITES[i].slug === slug) return SITES[i];
+  }
+  return null;
+}
+
+function clearBookmarks(e) {
+  if (e) e.preventDefault();
+  try { localStorage.removeItem(BOOKMARKS_KEY); } catch (err) {}
+  renderBookmarks();
+  return false;
+}
+
+function renderBookmarks() {
+  var bar = document.getElementById('bookmarks-bar');
+  var listEl = document.getElementById('bookmarks-list');
+  if (!bar || !listEl) return;
+  var slugs = loadBookmarks();
+  // Resolve to known sites; drop anything we don't have an entry for.
+  var items = [];
+  for (var i = 0; i < slugs.length; i++) {
+    var s = siteBySlug(slugs[i]);
+    if (s) items.push(s);
+  }
+  if (items.length === 0) {
+    bar.style.display = 'none';
+    return;
+  }
+  var html = '';
+  for (var k = 0; k < items.length; k++) {
+    var it = items[k];
+    var label = htmlEscape(it.display || it.title || it.slug);
+    html += '<a class="bm-link" href="' + encodeURIComponent(it.slug) + '.html">' + label + '</a>';
+  }
+  listEl.innerHTML = html;
+  bar.style.display = 'block';
+}
+
+function init() {
+  renderBookmarks();
+  renderResults();
+}
+
+window.onload = init;
+</script>
+</head>
+<body>
+
+<!-- Bookmarks bar (saved sites). Hidden until at least one site has been visited. -->
+<div id="bookmarks-bar">
+  <a class="bm-clear" href="#" onclick="return clearBookmarks(event);" title="Remove all bookmarks">clear</a>
+  <span class="bm-label"><span class="star">&#9733;</span>Bookmarks</span>
+  <span id="bookmarks-list"></span>
+</div>
+
+<!-- HOME VIEW -->
+<div id="home">
+
+<div class="top-links">
+  <a href="#">Web</a>
+  <a href="#">Images</a>
+  <a href="#">Groups</a>
+  <a href="#">News</a>
+  <a href="#">Froogle</a>
+  <a href="#">Local <sup style="color:#c41200; font-size:9px;">New!</sup></a>
+  <a href="#">more &raquo;</a>
+</div>
+
+<div class="center">
+
+  <div class="logo">
+    <span class="b1">G</span><span class="r">o</span><span class="y">o</span><span class="b2">g</span><span class="g">l</span><span class="r2">e</span>
+  </div>
+  <div class="tagline">Searching 8,058,044,651 web pages</div>
+
+  <form action="" method="get" autocomplete="off">
+    <div class="tabs">
+      <span class="active">Web</span>
+      <span>Images</span>
+      <span>Groups</span>
+      <span>News</span>
+      <span>Froogle</span>
+      <span>Local <sup style="color:#c41200;">New!</sup></span>
+      <span>more &raquo;</span>
+    </div>
+    <div class="searchbox">
+      <input type="text" name="q" autofocus>
+    </div>
+    <div class="buttons">
+      <input type="submit" value="Google Search">
+      <input type="submit" value="I'm Feeling Lucky">
+    </div>
+    <div class="adv-line">
+      <a href="#">Advanced Search</a> &nbsp;
+      <a href="#">Preferences</a> &nbsp;
+      <a href="#">Language Tools</a>
+    </div>
+  </form>
+
+  <div class="lang-line">
+    Google offered in: <a href="#">Espa&ntilde;ol</a> &nbsp; <a href="#">Fran&ccedil;ais</a> &nbsp; <a href="#">Deutsch</a>
+  </div>
+
+</div>
+
+</div>
+
+<!-- RESULTS / NO-RESULTS VIEW -->
+<div id="results" class="results" style="display:none;">
+
+  <div class="results-bar">
+    <span class="mini-logo">
+      <span class="b1">G</span><span class="r">o</span><span class="y">o</span><span class="b2">g</span><span class="g">l</span><span class="r2">e</span>
+    </span>
+    <form action="" method="get" autocomplete="off">
+      <span class="searchbox">
+        <input type="text" name="q" id="q-results">
+      </span>
+      <input type="submit" value="Search">
+    </form>
+  </div>
+
+  <div id="results-body"></div>
+
+</div>
+
+<div class="footer">
+  <a href="#">Advertising Programs</a> &nbsp;-&nbsp;
+  <a href="#">Business Solutions</a> &nbsp;-&nbsp;
+  <a href="#">About Google</a>
+  <div class="copy">&copy;2004 Google</div>
+</div>
+
+</body>
+</html>

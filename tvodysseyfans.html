@@ -156,8 +156,10 @@ function showTab(tabName) {
   document.querySelectorAll('.tab-content').forEach(function(t) { t.classList.remove('active'); });
   document.querySelector('[data-tab="'+tabName+'"]').classList.add('active');
   document.getElementById('content-'+tabName).classList.add('active');
-  // hide any open thread views
+  // reset thread view: hide any open thread, restore the recent-threads list
   document.querySelectorAll('.thread-view').forEach(function(t) { t.style.display = 'none'; });
+  var tl = document.getElementById('thread-list');
+  if (tl) tl.style.display = 'block';
 }
 function showThread(threadId) {
   document.querySelectorAll('.thread-view').forEach(function(t) { t.style.display = 'none'; });
@@ -168,6 +170,21 @@ function backToThreads() {
   document.querySelectorAll('.thread-view').forEach(function(t) { t.style.display = 'none'; });
   document.getElementById('thread-list').style.display = 'block';
 }
+</script>
+<script>
+/* Records this site in the gateway's bookmarks list. */
+(function(){
+  try {
+    var KEY = 'arg_bookmarks_v1', slug = 'tvodysseyfans';
+    var list = [];
+    try { list = JSON.parse(localStorage.getItem(KEY)) || []; } catch(e) {}
+    if (!Array.isArray(list)) list = [];
+    list = list.filter(function(s){ return typeof s === 'string' && s !== slug; });
+    list.unshift(slug);
+    if (list.length > 20) list = list.slice(0, 20);
+    localStorage.setItem(KEY, JSON.stringify(list));
+  } catch(e) {}
+})();
 </script>
 </head>
 <body>
