@@ -6,7 +6,8 @@ const ROOT = __dirname;
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 
-const BLOCKED = new Set(['readme.md', 'image_manifest.txt', 'server.js', 'package.json', 'package-lock.json', 'railway.json', '.gitignore', 'dockerfile']);
+const BLOCKED_FILES = new Set(['image_manifest.txt', 'server.js', 'package.json', 'package-lock.json', 'railway.json', '.gitignore', 'dockerfile']);
+const BLOCKED_EXTS = new Set(['.md']);
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -57,7 +58,8 @@ const server = http.createServer((req, res) => {
   }
 
   const base = path.basename(requested).toLowerCase();
-  if (BLOCKED.has(base)) {
+  const baseExt = path.extname(requested).toLowerCase();
+  if (BLOCKED_FILES.has(base) || BLOCKED_EXTS.has(baseExt)) {
     return send(res, 404, 'Not Found');
   }
 
