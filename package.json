@@ -1,0 +1,12 @@
+{
+  "name": "public-access",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Deep Lake ARG static site bundle",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
