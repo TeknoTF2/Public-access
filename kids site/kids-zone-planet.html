@@ -2244,8 +2244,10 @@ Object.assign(ATTACKS, {
   // covered floor is ~40%, leaving ~60% open.
   ACID_PUDDLES: {
     name: 'ACID PUDDLES',
-    duration: 7.5,
+    duration: 8.5,
     init() {
+      bossAI.state.phase = 'telegraph';
+      bossAI.state.t = 0;
       bossAI.state.puddles = [];
       const w = ARENA.w / 7;
       for (let i = 0; i < 3; i++) {
@@ -2260,6 +2262,14 @@ Object.assign(ATTACKS, {
     update(dt) {
       const s = bossAI.state;
       bossSweep(dt, 0.3);
+      s.t += dt;
+      // 1.0s grace telegraph — puddle outlines flash on the floor
+      // but don't deal damage yet, so the player can step away from
+      // their footprint before the acid lands.
+      if (s.phase === 'telegraph') {
+        if (s.t >= 1.0) { s.phase = 'active'; s.t = 0; }
+        return;
+      }
       // Slide puddles.
       for (const p of s.puddles) {
         p.x += p.vx * dt;
@@ -2281,11 +2291,22 @@ Object.assign(ATTACKS, {
       if (!s || !s.puddles) return;
       ctx.save();
       const py = ARENA.y + ARENA.h - 6;
-      for (const p of s.puddles) {
-        ctx.fillStyle = 'rgba(140, 255, 80, 0.7)';
-        ctx.fillRect(p.x - p.w / 2, py, p.w, 6);
-        ctx.fillStyle = 'rgba(80, 255, 60, 0.4)';
-        ctx.fillRect(p.x - p.w / 2, py - 3, p.w, 3);
+      if (s.phase === 'telegraph') {
+        const a = 0.25 + 0.35 * Math.sin(s.t * 18);
+        for (const p of s.puddles) {
+          ctx.strokeStyle = 'rgba(160, 255, 80, ' + a.toFixed(2) + ')';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(p.x - p.w / 2 + 0.5, py + 0.5, p.w, 6);
+          ctx.fillStyle = 'rgba(160, 255, 80, ' + (a * 0.35).toFixed(2) + ')';
+          ctx.fillRect(p.x - p.w / 2, py, p.w, 6);
+        }
+      } else {
+        for (const p of s.puddles) {
+          ctx.fillStyle = 'rgba(140, 255, 80, 0.7)';
+          ctx.fillRect(p.x - p.w / 2, py, p.w, 6);
+          ctx.fillStyle = 'rgba(80, 255, 60, 0.4)';
+          ctx.fillRect(p.x - p.w / 2, py - 3, p.w, 3);
+        }
       }
       ctx.restore();
     },
@@ -2409,12 +2430,15 @@ Object.assign(ATTACKS, {
           s.geysers.splice(i, 1);
         }
       }
-      // Mid-height drift bullets (between geyser rounds and during).
+      // Drift bullets — placed just above the floor so a grounded
+      // player must actually jump them. The previous y was at 45%
+      // of the arena height (above the player's jump apex), so the
+      // bullets sailed harmlessly overhead.
       s.driftT += dt;
       if (s.driftT >= 0.55) {
         s.driftT = 0;
         const fromLeft = Math.random() < 0.5;
-        const yMid = ARENA.y + ARENA.h * 0.45 + (Math.random() - 0.5) * 30;
+        const yMid = ARENA.y + ARENA.h - 18 + (Math.random() - 0.5) * 6;
         spawnBullet(
           fromLeft ? ARENA.x - 6 : ARENA.x + ARENA.w + 6,
           yMid,
@@ -2466,8 +2490,12 @@ Object.assign(ATTACKS, {
       // gaps the player can read and time their jumps against.
       if (s.streamT >= 0.45) {
         s.streamT = 0;
-        const yLow  = ARENA.y + ARENA.h * 0.62;
-        const yHigh = ARENA.y + ARENA.h * 0.38;
+        // Both streams drop into the player's jump arc — the lower
+        // one clips the floor, the higher one needs a slightly more
+        // committed jump. Previously these were at 62% / 38% of
+        // arena height, well above the player's jump apex.
+        const yLow  = ARENA.y + ARENA.h - 16;
+        const yHigh = ARENA.y + ARENA.h - 40;
         spawnBullet(ARENA.x - 6, yLow, 140 * P2_SPEED, 0, { color: '#80c0ff' });
         spawnBullet(ARENA.x + ARENA.w + 6, yHigh, -140 * P2_SPEED, 0, { color: '#80c0ff' });
       }
