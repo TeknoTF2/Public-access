@@ -176,12 +176,16 @@ const BLUE_JUMP_VEL = -380;     // px/sec
 const BLUE_HORIZ_SPEED = 200;
 const BLUE_TERMINAL = 360;
 
-// PURPLE
-const PURPLE_GRID = 40;         // px between gridlines
-const PURPLE_MOVE_DURATION = 0.12; // sec per cell
+// PURPLE — 4 equally-spaced horizontal lanes inside the arena.
+// L/R are smooth/free, U/D "jumps" between adjacent lanes.
+const PURPLE_LINES = 4;
+const PURPLE_HORIZ_SPEED = 220;
+const PURPLE_JUMP_DURATION = 0.14; // sec per lane jump
 
-// GREEN
-const GREEN_SHIELD_R = 32;
+// GREEN — directional shield. Player is locked center; arrow keys
+// aim the shield, which only blocks bullets coming from that side.
+const GREEN_SHIELD_R = 26;
+const GREEN_SHIELD_ARC = (2 * Math.PI) / 3; // 120° arc visual
 
 // Bullets
 const PLAYER_FIRE_INTERVAL = 0.1; // sec
@@ -203,16 +207,21 @@ const player = {
   x: ARENA.x + ARENA.w / 2,
   y: ARENA.y + ARENA.h - 60,
   vx: 0, vy: 0,
-  hp: 1, maxHp: 1,
+  hp: 1, maxHp: 3,
   state: S_RED,
   invincible: false,
   iframes: 0,
   fireCooldown: 0,
-  // PURPLE state movement target
-  gridMoving: false,
-  gridFromX: 0, gridFromY: 0,
-  gridToX: 0, gridToY: 0,
-  gridT: 0,
+  // PURPLE state — locked to one of 4 horizontal lines, smooth L↔R,
+  // up/down "jumps" between adjacent lines.
+  purpleLine: 0,
+  purpleJumping: false,
+  purpleJumpFromY: 0,
+  purpleJumpToY: 0,
+  purpleJumpT: 0,
+  // GREEN state — locked at center, arrow keys aim a directional
+  // shield that only blocks bullets coming from that side.
+  shieldDir: 'up',
 };
 
 const boss = {
@@ -274,14 +283,19 @@ function pointInRect(px, py, rx, ry, rw, rh) {
   return px >= rx && px <= rx + rw && py >= ry && py <= ry + rh;
 }
 
-// Snap a coord to the nearest grid intersection inside the arena.
-function snapGrid(x, y) {
-  const gx = Math.round((x - ARENA.x) / PURPLE_GRID) * PURPLE_GRID + ARENA.x;
-  const gy = Math.round((y - ARENA.y) / PURPLE_GRID) * PURPLE_GRID + ARENA.y;
-  return [
-    clamp(gx, ARENA.x, ARENA.x + ARENA.w),
-    clamp(gy, ARENA.y, ARENA.y + ARENA.h),
-  ];
+// Y position of the i-th PURPLE lane (0 = topmost).
+function purpleLineY(i) {
+  return ARENA.y + ARENA.h * (i + 1) / (PURPLE_LINES + 1);
+}
+
+// Snap a y coord to the nearest PURPLE lane index.
+function nearestPurpleLine(y) {
+  let best = 0, bestD = Infinity;
+  for (let i = 0; i < PURPLE_LINES; i++) {
+    const d = Math.abs(y - purpleLineY(i));
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
 }
 
 // ---------- State setters ----------
@@ -290,16 +304,15 @@ function setState(newState) {
   player.state = newState;
   player.vx = 0;
   player.vy = 0;
-  player.gridMoving = false;
+  player.purpleJumping = false;
 
   if (newState === S_PURPLE) {
-    const [gx, gy] = snapGrid(player.x, player.y);
-    player.x = gx; player.y = gy;
-    player.gridFromX = gx; player.gridFromY = gy;
-    player.gridToX = gx;   player.gridToY = gy;
+    player.purpleLine = nearestPurpleLine(player.y);
+    player.y = purpleLineY(player.purpleLine);
   } else if (newState === S_GREEN) {
     player.x = ARENA.x + ARENA.w / 2;
     player.y = ARENA.y + ARENA.h / 2;
+    // shieldDir persists across re-entries
   }
 }
 
@@ -383,12 +396,13 @@ function resetGame() {
   player.x = ARENA.x + ARENA.w / 2;
   player.y = ARENA.y + ARENA.h - 60;
   player.vx = 0; player.vy = 0;
-  player.hp = player.maxHp;
+  player.hp = 1;                    // always start at 1/3 — the fight is desperate
   player.state = S_RED;
   player.invincible = false;
   player.iframes = 0;
   player.fireCooldown = 0;
-  player.gridMoving = false;
+  player.purpleJumping = false;
+  player.shieldDir = 'up';
 
   boss.x = CANVAS_W / 2;
   boss.y = BOSS_ZONE.y + BOSS_ZONE.h / 2;
@@ -536,49 +550,58 @@ function updatePlayerBlue(dt) {
 }
 
 function updatePlayerPurple(dt) {
-  if (player.gridMoving) {
-    player.gridT += dt / PURPLE_MOVE_DURATION;
-    if (player.gridT >= 1) {
-      player.gridT = 1;
-      player.x = player.gridToX;
-      player.y = player.gridToY;
-      player.gridMoving = false;
+  // Horizontal travel along the current lane is free and smooth.
+  let dx = 0;
+  if (keys.has('ArrowLeft'))  dx -= 1;
+  if (keys.has('ArrowRight')) dx += 1;
+  player.x += dx * PURPLE_HORIZ_SPEED * dt;
+  const half = PLAYER_HITBOX / 2;
+  player.x = clamp(player.x, ARENA.x + half, ARENA.x + ARENA.w - half);
+
+  // Up/down "jumps" between adjacent lanes, animated.
+  if (player.purpleJumping) {
+    player.purpleJumpT += dt / PURPLE_JUMP_DURATION;
+    if (player.purpleJumpT >= 1) {
+      player.purpleJumpT = 1;
+      player.y = player.purpleJumpToY;
+      player.purpleJumping = false;
     } else {
-      // ease out
-      const t = player.gridT;
-      const e = 1 - (1 - t) * (1 - t);
-      player.x = player.gridFromX + (player.gridToX - player.gridFromX) * e;
-      player.y = player.gridFromY + (player.gridToY - player.gridFromY) * e;
+      const t = player.purpleJumpT;
+      const e = 1 - (1 - t) * (1 - t); // ease-out
+      player.y = player.purpleJumpFromY + (player.purpleJumpToY - player.purpleJumpFromY) * e;
     }
     return;
   }
-  // Pick a direction; prioritize horizontal over vertical so diagonals don't lock
-  let dx = 0, dy = 0;
-  if (keys.has('ArrowLeft'))  dx = -1;
-  if (keys.has('ArrowRight')) dx = +1;
-  if (dx === 0) {
-    if (keys.has('ArrowUp'))   dy = -1;
-    if (keys.has('ArrowDown')) dy = +1;
-  }
-  if (dx === 0 && dy === 0) return;
 
-  const tx = player.x + dx * PURPLE_GRID;
-  const ty = player.y + dy * PURPLE_GRID;
-  if (tx < ARENA.x || tx > ARENA.x + ARENA.w) return;
-  if (ty < ARENA.y || ty > ARENA.y + ARENA.h) return;
+  // Stay locked to the current lane's y while not jumping.
+  player.y = purpleLineY(player.purpleLine);
 
-  player.gridFromX = player.x;
-  player.gridFromY = player.y;
-  player.gridToX = tx;
-  player.gridToY = ty;
-  player.gridT = 0;
-  player.gridMoving = true;
+  let dLine = 0;
+  if (keys.has('ArrowUp'))   dLine -= 1;
+  if (keys.has('ArrowDown')) dLine += 1;
+  if (dLine === 0) return;
+
+  const target = player.purpleLine + dLine;
+  if (target < 0 || target >= PURPLE_LINES) return;
+
+  player.purpleJumpFromY = player.y;
+  player.purpleJumpToY   = purpleLineY(target);
+  player.purpleJumpT     = 0;
+  player.purpleJumping   = true;
+  player.purpleLine      = target;
 }
 
 function updatePlayerGreen(dt) {
-  // Locked at center. Position is fixed to arena center.
+  // Player locked at center.
   player.x = ARENA.x + ARENA.w / 2;
   player.y = ARENA.y + ARENA.h / 2;
+
+  // Arrow keys aim the directional shield. Snap on press; last-pressed
+  // wins if multiple are held.
+  if      (keys.has('ArrowUp'))    player.shieldDir = 'up';
+  else if (keys.has('ArrowDown'))  player.shieldDir = 'down';
+  else if (keys.has('ArrowLeft'))  player.shieldDir = 'left';
+  else if (keys.has('ArrowRight')) player.shieldDir = 'right';
 }
 
 function clampPlayerToArena() {
@@ -644,24 +667,34 @@ function checkCollisions() {
     const px = player.x - half, py = player.y - half;
     for (let i = enemyBullets.length - 1; i >= 0; i--) {
       const b = enemyBullets[i];
-      // GREEN shield: bullets that touch the shield ring vanish but
-      // do no damage.
+      if (!pointInRect(b.x, b.y, px, py, PLAYER_HITBOX, PLAYER_HITBOX)) continue;
+
+      // GREEN: directional shield. Determine which side the bullet
+      // is approaching from (dominant axis of its velocity); if that
+      // matches the shield direction, the bullet is consumed without
+      // damage. Otherwise it hits normally.
       if (player.state === S_GREEN) {
-        const dx = b.x - player.x, dy = b.y - player.y;
-        if (dx * dx + dy * dy <= GREEN_SHIELD_R * GREEN_SHIELD_R) {
+        const ax = Math.abs(b.vx || 0);
+        const ay = Math.abs(b.vy || 0);
+        let approach;
+        if (ax > ay) {
+          approach = (b.vx || 0) > 0 ? 'left' : 'right';
+        } else {
+          approach = (b.vy || 0) >= 0 ? 'up' : 'down';
+        }
+        if (approach === player.shieldDir) {
           enemyBullets.splice(i, 1);
+          continue;
         }
-        continue;
       }
-      if (pointInRect(b.x, b.y, px, py, PLAYER_HITBOX, PLAYER_HITBOX)) {
-        enemyBullets.splice(i, 1);
-        player.hp -= 1;
-        player.iframes = POST_HIT_IFRAMES;
-        if (player.hp <= 0) {
-          player.hp = 0;
-          killPlayer();
-          break;
-        }
+
+      enemyBullets.splice(i, 1);
+      player.hp -= 1;
+      player.iframes = POST_HIT_IFRAMES;
+      if (player.hp <= 0) {
+        player.hp = 0;
+        killPlayer();
+        break;
       }
     }
   }
@@ -698,21 +731,16 @@ function drawArena() {
   ctx.strokeStyle = '#ffffff';
   ctx.strokeRect(ARENA.x + 0.5, ARENA.y + 0.5, ARENA.w, ARENA.h);
 
-  // PURPLE state shows the grid.
+  // PURPLE: render the 4 horizontal lanes the player can traverse.
   if (player.state === S_PURPLE) {
     ctx.save();
-    ctx.strokeStyle = 'rgba(200, 100, 255, 0.35)';
+    ctx.strokeStyle = 'rgba(200, 100, 255, 0.55)';
     ctx.lineWidth = 1;
-    for (let gx = ARENA.x; gx <= ARENA.x + ARENA.w; gx += PURPLE_GRID) {
+    for (let i = 0; i < PURPLE_LINES; i++) {
+      const ly = Math.round(purpleLineY(i)) + 0.5;
       ctx.beginPath();
-      ctx.moveTo(gx + 0.5, ARENA.y);
-      ctx.lineTo(gx + 0.5, ARENA.y + ARENA.h);
-      ctx.stroke();
-    }
-    for (let gy = ARENA.y; gy <= ARENA.y + ARENA.h; gy += PURPLE_GRID) {
-      ctx.beginPath();
-      ctx.moveTo(ARENA.x,           gy + 0.5);
-      ctx.lineTo(ARENA.x + ARENA.w, gy + 0.5);
+      ctx.moveTo(ARENA.x + 4,           ly);
+      ctx.lineTo(ARENA.x + ARENA.w - 4, ly);
       ctx.stroke();
     }
     ctx.restore();
@@ -746,18 +774,32 @@ function drawPlayer() {
   const showSprite = player.iframes <= 0 || (Math.floor(player.iframes * 16) % 2 === 0);
   if (showSprite) drawEarth(player.x, player.y);
 
-  // GREEN state: big shield ring around the player.
+  // GREEN state: directional shield arc on the chosen side.
   if (player.state === S_GREEN) {
+    // Canvas angles: 0 = +x (right), PI/2 = +y (down), PI = left,
+    // 3PI/2 = up. Center the arc on the chosen side.
+    const center = {
+      right: 0,
+      down:  Math.PI / 2,
+      left:  Math.PI,
+      up:    3 * Math.PI / 2,
+    }[player.shieldDir];
+    const half = GREEN_SHIELD_ARC / 2;
+    const start = center - half;
+    const end   = center + half;
+
     ctx.save();
-    ctx.strokeStyle = 'rgba(80, 255, 120, 0.85)';
+    // Outer glow
+    ctx.strokeStyle = 'rgba(80, 255, 120, 0.25)';
+    ctx.lineWidth = 9;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, GREEN_SHIELD_R, start, end);
+    ctx.stroke();
+    // Inner stroke
+    ctx.strokeStyle = 'rgba(140, 255, 170, 0.95)';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(player.x, player.y, GREEN_SHIELD_R, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(80, 255, 120, 0.25)';
-    ctx.lineWidth = 8;
-    ctx.beginPath();
-    ctx.arc(player.x, player.y, GREEN_SHIELD_R, 0, Math.PI * 2);
+    ctx.arc(player.x, player.y, GREEN_SHIELD_R, start, end);
     ctx.stroke();
     ctx.restore();
   }
