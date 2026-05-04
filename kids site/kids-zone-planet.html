@@ -1008,11 +1008,17 @@ const ACID_BULLET_COLOR  = '#aaff44'; // brighter green for the signature
 // ---------- Bullet spawn helpers ----------
 function spawnBullet(x, y, vx, vy, opts) {
   const o = opts || {};
-  enemyBullets.push({
+  const b = {
     x, y, vx, vy,
     r: o.r != null ? o.r : ENEMY_BULLET_R,
     color: o.color || ENEMY_BULLET_COLOR,
-  });
+  };
+  // Optional lifespan in seconds — bullet despawns when it elapses.
+  // Used by trail attacks (FUME_TRAIL, CHAIN_REACTION) so static
+  // bullets don't accumulate indefinitely.
+  if (o.life != null) b.life = o.life;
+  if (o.harmless) b.harmless = true;
+  enemyBullets.push(b);
 }
 
 function spawnAimed(x, y, tx, ty, speed, opts) {
@@ -1966,7 +1972,9 @@ Object.assign(ATTACKS, {
     },
   },
 
-  // Center sprinkler + shrinking edge bullets.
+  // Center sprinkler + occasional edge punctuation. The sprinkler
+  // is the real challenge here; the edge bullets are sparse and
+  // single-side to keep the orbit puzzle readable.
   PRESSURE_VALVE: {
     name: 'PRESSURE VALVE',
     duration: 7.5,
@@ -1991,22 +1999,24 @@ Object.assign(ATTACKS, {
                     Math.cos(a) * 150 * P2_SPEED,
                     Math.sin(a) * 150 * P2_SPEED);
       }
-      // Edge inward bullets (4 sides)
-      if (s.edgeT >= 0.45) {
+      // Edge punctuation — only ONE bullet per cycle from a random
+      // side, on a slow cadence. Was 4 bullets every 0.45s, which
+      // overwhelmed the sprinkler dodge.
+      if (s.edgeT >= 1.2) {
         s.edgeT = 0;
-        const sp = 60 * P2_SPEED;
-        // Top
-        const tx = ARENA.x + Math.random() * ARENA.w;
-        spawnBullet(tx, ARENA.y + 4, 0, sp);
-        // Bottom
-        const bx = ARENA.x + Math.random() * ARENA.w;
-        spawnBullet(bx, ARENA.y + ARENA.h - 4, 0, -sp);
-        // Left
-        const ly = ARENA.y + Math.random() * ARENA.h;
-        spawnBullet(ARENA.x + 4, ly, sp, 0);
-        // Right
-        const ry = ARENA.y + Math.random() * ARENA.h;
-        spawnBullet(ARENA.x + ARENA.w - 4, ry, -sp, 0);
+        const sp = 50 * P2_SPEED;
+        const side = Math.floor(Math.random() * 4);
+        if (side === 0) {
+          spawnBullet(ARENA.x + Math.random() * ARENA.w, ARENA.y + 4, 0, sp);
+        } else if (side === 1) {
+          spawnBullet(ARENA.x + Math.random() * ARENA.w,
+                      ARENA.y + ARENA.h - 4, 0, -sp);
+        } else if (side === 2) {
+          spawnBullet(ARENA.x + 4, ARENA.y + Math.random() * ARENA.h, sp, 0);
+        } else {
+          spawnBullet(ARENA.x + ARENA.w - 4,
+                      ARENA.y + Math.random() * ARENA.h, -sp, 0);
+        }
       }
     },
   },
@@ -2038,7 +2048,9 @@ Object.assign(ATTACKS, {
         sk.dropT += dt;
         if (sk.dropT >= 0.3) {
           sk.dropT = 0;
-          spawnBullet(sk.x, sk.y, 0, 0, { color: '#aa44ff' });
+          // Trail fades after 6s per spec, so the arena clears as
+          // older trail expires while new heads keep moving.
+          spawnBullet(sk.x, sk.y, 0, 0, { color: '#aa44ff', life: 6.0 });
         }
       }
     },
@@ -2080,8 +2092,9 @@ Object.assign(ATTACKS, {
       const s = bossAI.state;
       bossSweep(dt, 0.3);
       s.t += dt;
-      // Drift bullets in current direction.
-      const sp = 45 * P2_SPEED;
+      // Drift bullets in current direction (slower than the original
+      // 45px/s so the player has a beat to read each shift).
+      const sp = 28 * P2_SPEED;
       for (const b of s.gridBullets) {
         b.x += s.dir.x * sp * dt;
         b.y += s.dir.y * sp * dt;
@@ -2191,18 +2204,20 @@ Object.assign(ATTACKS, {
   //  BLUE SOUL — gravity-locked
   // ============================================================
 
-  // Sliding green puddles on the floor + ceiling drops.
+  // Sliding green puddles on the floor + ceiling drops. Puddles are
+  // sized so the player has real safe floor between them — total
+  // covered floor is ~40%, leaving ~60% open.
   ACID_PUDDLES: {
     name: 'ACID PUDDLES',
     duration: 7.5,
     init() {
       bossAI.state.puddles = [];
-      const w = ARENA.w / 4;
+      const w = ARENA.w / 7;
       for (let i = 0; i < 3; i++) {
         bossAI.state.puddles.push({
           x: ARENA.x + (i + 0.5) * (ARENA.w / 3),
           w: w,
-          vx: (Math.random() < 0.5 ? -1 : 1) * 50,
+          vx: (Math.random() < 0.5 ? -1 : 1) * 35,
         });
       }
       bossAI.state.dropT = 0;
@@ -2412,16 +2427,15 @@ Object.assign(ATTACKS, {
       const s = bossAI.state;
       bossSweep(dt, 0.3);
       s.streamT += dt;
-      if (s.streamT >= 0.20) {
+      // Slower, sparser crossing streams — each stream pulses with
+      // gaps the player can read and time their jumps against.
+      if (s.streamT >= 0.45) {
         s.streamT = 0;
         const yLow  = ARENA.y + ARENA.h * 0.62;
         const yHigh = ARENA.y + ARENA.h * 0.38;
-        spawnBullet(ARENA.x - 6, yLow, 200 * P2_SPEED, 0, { color: '#80c0ff' });
-        spawnBullet(ARENA.x + ARENA.w + 6, yHigh, -200 * P2_SPEED, 0, { color: '#80c0ff' });
+        spawnBullet(ARENA.x - 6, yLow, 140 * P2_SPEED, 0, { color: '#80c0ff' });
+        spawnBullet(ARENA.x + ARENA.w + 6, yHigh, -140 * P2_SPEED, 0, { color: '#80c0ff' });
       }
-      // Periodic "bounce window" — a short gap in both streams that
-      // rewards a well-timed jump. We just throttle every 2.5s with
-      // a brief no-spawn window.
     },
   },
 
@@ -2698,7 +2712,9 @@ Object.assign(ATTACKS, {
         ball.dropT += dt;
         if (ball.dropT >= 0.18) {
           ball.dropT = 0;
-          spawnBullet(ball.x, ly, 0, 0, { color: '#ffaaff' });
+          // Trail fades so the rails don't end up fully clogged by
+          // the time three balls are bouncing.
+          spawnBullet(ball.x, ly, 0, 0, { color: '#ffaaff', life: 4.0 });
         }
         if (ball.vx > 0 && ball.x > ARENA.x + ARENA.w) {
           ball.line = (ball.line + 1) % PURPLE_LINES;
@@ -2913,7 +2929,10 @@ Object.assign(ATTACKS, {
       if (s.fastPending >= 0) {
         s.fastDelay -= dt;
         if (s.fastDelay <= 0) {
-          _fireCardinal(s.fastPending, { speed: 320, r: 4 });
+          // Fast bullet was 320 — too fast to react to even when
+          // expected. 220 still arrives before the slow shot but
+          // is humanly readable.
+          _fireCardinal(s.fastPending, { speed: 220, r: 4 });
           s.fastPending = -1;
         }
       }
@@ -2925,7 +2944,7 @@ Object.assign(ATTACKS, {
         do { fastDir = Math.floor(Math.random() * 4); } while (fastDir === slowDir);
         _fireCardinal(slowDir, { speed: 60, r: 14, color: '#88ff88' });
         s.fastPending = fastDir;
-        s.fastDelay = 0.6 - s.round * 0.15;
+        s.fastDelay = 0.6 - s.round * 0.10;
       }
     },
   },
@@ -2959,9 +2978,11 @@ Object.assign(ATTACKS, {
       }
       for (const t of s.turrets) {
         t.fireT += dt;
-        if (t.fireT >= 0.20) {
+        // Slower fire rate (was 0.20). The roulette challenge is
+        // the relocation surprise, not raw bullet density.
+        if (t.fireT >= 0.32) {
           t.fireT = 0;
-          _fireCardinal(t.edge, { speed: 230 });
+          _fireCardinal(t.edge, { speed: 200 });
         }
       }
     },
@@ -3003,14 +3024,19 @@ Object.assign(ATTACKS, {
         return;
       }
       // Stream from all four edges; heavy direction fires denser.
+      // Was 0.10s cadence with 40% odds on light directions — that
+      // produced ~24 bullets/sec across the four edges, far too
+      // dense to take three clears against. 0.18s + 25% odds keeps
+      // the heavy stream readable while the light ones serve as
+      // pressure that the player tanks.
       s.spawnT += dt;
-      if (s.spawnT >= 0.10) {
+      if (s.spawnT >= 0.18) {
         s.spawnT = 0;
         for (let d = 0; d < 4; d++) {
           const heavy = (d === s.heavy);
-          const odds = heavy ? 1.0 : 0.40;
+          const odds = heavy ? 1.0 : 0.25;
           if (Math.random() < odds) {
-            _fireCardinal(d, { speed: 200 });
+            _fireCardinal(d, { speed: 180 });
           }
         }
       }
@@ -3089,9 +3115,12 @@ function _makeSnake() {
 function _populateGrid() {
   const s = bossAI.state;
   s.gridBullets = [];
-  const step = 28;
-  for (let x = ARENA.x + 8; x < ARENA.x + ARENA.w; x += step) {
-    for (let y = ARENA.y + 8; y < ARENA.y + ARENA.h; y += step) {
+  // Wider grid spacing (was 28). With 36px step the player can
+  // squeeze between bullets when the gap drifts past — they no
+  // longer have to perfectly stay inside the safe pocket.
+  const step = 36;
+  for (let x = ARENA.x + 10; x < ARENA.x + ARENA.w; x += step) {
+    for (let y = ARENA.y + 10; y < ARENA.y + ARENA.h; y += step) {
       s.gridBullets.push({ x, y });
     }
   }
@@ -3974,6 +4003,12 @@ function updateBullets(dt) {
     const b = enemyBullets[i];
     b.x += (b.vx || 0) * dt;
     b.y += (b.vy || 0) * dt;
+    // Lifespan tick — bullets with a `life` property despawn when it
+    // hits zero (used for fading trails).
+    if (b.life != null) {
+      b.life -= dt;
+      if (b.life <= 0) { enemyBullets.splice(i, 1); continue; }
+    }
     if (b.x < -20 || b.x > CANVAS_W + 20 || b.y < -20 || b.y > CANVAS_H + 20) {
       enemyBullets.splice(i, 1);
     }
