@@ -613,6 +613,26 @@ function resetGame() {
 
   resetBossAI();
 
+  // Phase 3 transient state.
+  if (typeof defeatSeq !== 'undefined') {
+    defeatSeq.active = false;
+    defeatSeq.t = 0;
+    defeatSeq.redirected = false;
+  }
+  if (typeof phase3Bark !== 'undefined') {
+    phase3Bark.active = false;
+    phase3Bark.pauseCombat = false;
+  }
+  if (typeof errorFlood !== 'undefined') {
+    errorFlood.active = false;
+    errorFlood.popups = [];
+  }
+  // Reset arena bounds in case BOX_CRUSH was mid-modifier.
+  if (typeof ARENA_DEFAULT !== 'undefined') {
+    ARENA.x = ARENA_DEFAULT.x;
+    ARENA.w = ARENA_DEFAULT.w;
+  }
+
   // Stop any in-progress music; the next unpause will start phase 1.
   stopAllMusic();
   nowPlaying.active = false;
@@ -892,6 +912,8 @@ function resetBossAI() {
   bossAI.gravityMul = 1;
   bossAI.jumpMul = 1;
   bossAI.blueFloorY = 0;
+  // ---- Phase 3 ----
+  bossAI.phase3 = null;
 }
 
 // ---------- Phase 1 attack pool ----------
@@ -3045,6 +3067,633 @@ function _toxicFortressTick(s, dt) {
   }
 }
 
+// =============================================================
+//  PHASE 3 — combo attacks + 4th-wall breaks + final attack
+// =============================================================
+//  Phase 3 fires two attacks at once (one Phase 1, one Phase 2),
+//  with the soul color forced by the combo. Game-breaking modifiers
+//  (BOX_CRUSH, TEXT_BOX_ASSAULT, INVERSION, SOUL_SCRAMBLE,
+//  ERROR_FLOOD) overlay between combos. At ~5% HP a 32-second
+//  Final Attack runs through all four soul states. After it ends,
+//  the boss stands still — the next auto-fire hit kills him.
+// =============================================================
+
+const PHASE3_COMBOS = [
+  // Order matches phase3_attacks.md.
+  { id: 'COMBO_1', soul: 'blue',   a1: 'ACID_RAIN',       a2: 'GRAVITY_WELL' },
+  { id: 'COMBO_2', soul: 'purple', a1: 'SMOG_SPIRAL',     a2: 'TRACK_SWITCH' },
+  { id: 'COMBO_3', soul: 'green',  a1: 'EXHAUST_PIPES',   a2: 'MACHINE_GUN_ROULETTE' },
+  { id: 'COMBO_4', soul: 'blue',   a1: 'PIPELINE_BURST',  a2: 'RISING_SMOG' },
+  { id: 'COMBO_5', soul: 'purple', a1: 'TOXIC_CLOUD',     a2: 'ALTERNATING_CURRENT' },
+  { id: 'COMBO_6', soul: 'green',  a1: 'CHEMICAL_RUNOFF', a2: 'RING_OF_FIRE' },
+  { id: 'COMBO_7', soul: 'purple', a1: 'SMOG_WALL',       a2: 'RAIL_SHUTDOWN' },
+  { id: 'COMBO_8', soul: 'red',    a1: 'AIMED_BARRAGE',   a2: 'CONTAMINATION_ZONES' },
+];
+
+const PHASE3_MODIFIERS = ['BOX_CRUSH', 'TEXT_BOX_ASSAULT', 'INVERSION', 'ERROR_FLOOD'];
+// SOUL_SCRAMBLE is held back as a one-shot ambush (handled separately).
+
+const FINAL_ATTACK_SEQUENCE = [
+  { soul: 'red',    a1: 'CONTAMINATION_ZONES', a2: 'SMOG_SPIRAL' },
+  { soul: 'blue',   a1: 'ACID_RAIN',           a2: 'GEYSER' },
+  { soul: 'purple', a1: 'LINE_SWEEP',          a2: 'ALTERNATING_CURRENT' },
+  { soul: 'green',  a1: 'CHEMICAL_RUNOFF',     a2: 'CARDINAL_SHOTS' },
+];
+
+// Mid-combat [RED] barks, fired once each as HP crosses thresholds.
+const PHASE3_BARKS = [
+  { hp: 0.95, text: "YOU DON'T KNOW WHAT YOU'RE DOING" },
+  { hp: 0.80, text: "THEY TOLD YOU THIS WAS A GAME" },
+  { hp: 0.65, text: "IT STOPPED BEING A GAME A LONG TIME AGO" },
+  { hp: 0.45, text: "YOU COULD HAVE JUST LEFT US ALONE" },
+  { hp: 0.32, text: "WE WERE FINE" },
+  { hp: 0.22, text: "WE WERE ALL FINE" },
+  { hp: 0.10, text: "please", small: true, pause: true },
+];
+
+const ARENA_DEFAULT = { x: ARENA.x, y: ARENA.y, w: ARENA.w, h: ARENA.h };
+
+// ---------- Phase 3 transient overlay state ----------
+const phase3Bark = {
+  active: false,
+  text: '',
+  timer: 0,
+  total: 0,
+  small: false,
+  pauseCombat: false,
+};
+
+const errorFlood = {
+  active: false,
+  popups: [],
+  timer: 0,
+};
+
+// ---------- Phase 3 startup ----------
+function startPhase3() {
+  // Boss is reborn as the [RED] entity — full HP bar for the new fight.
+  boss.hp = boss.maxHp;
+  boss.invincible = false;
+  enemyBullets.length = 0;
+
+  // Open in COMBO 1 (Acid Rain + Gravity Well, Blue soul) per spec.
+  bossAI.phase3 = {
+    slot1: { attack: null, attackT: 0, state: {} },
+    slot2: { attack: null, attackT: 0, state: {} },
+    comboIdx: -1,                  // bumped to 0 on first start
+    comboHistory: [],
+    downtime: 1.2,
+    pendingModifier: null,
+    activeModifier: null,
+    modifierT: 0,
+    modifierDur: 0,
+    soulScrambleUsed: false,
+    errorFloodUsedOnGreen: false,
+    barksFired: {},
+    finalTriggered: false,
+    finalStep: 0,
+    finalT: 0,
+    finalDone: false,
+    pleasePauseT: 0,
+  };
+  // Force the Phase 3 opening combo's soul.
+  setState(SOUL_TO_STATE[PHASE3_COMBOS[0].soul]);
+  bossAI.soul = PHASE3_COMBOS[0].soul;
+  bossAI.bulletSpeedMul = 1.3;     // post-Phase-1 speed bump persists
+  startPhase3Combo(0);
+}
+
+function startPhase3Combo(idx) {
+  const p3 = bossAI.phase3;
+  const combo = PHASE3_COMBOS[idx];
+  p3.comboIdx = idx;
+  p3.comboHistory.push(idx);
+  if (p3.comboHistory.length > 4) p3.comboHistory.shift();
+  setState(SOUL_TO_STATE[combo.soul]);
+  bossAI.soul = combo.soul;
+  enemyBullets.length = 0;
+  startSlot(p3.slot1, combo.a1);
+  startSlot(p3.slot2, combo.a2);
+}
+
+function startSlot(slot, attackId) {
+  slot.attack = attackId;
+  slot.attackT = 0;
+  slot.state = {};
+  // Run the attack's init() inside its own state slot.
+  withSlotContext(slot, () => {
+    const def = ATTACKS[attackId];
+    if (def && def.init) def.init();
+  });
+}
+
+// Run a function with bossAI.{state,attack,attackT} swapped to a slot's
+// context, then restore. Used for parallel attack updates.
+function withSlotContext(slot, fn) {
+  const sa = bossAI.state, sb = bossAI.attack, sc = bossAI.attackT;
+  bossAI.state = slot.state;
+  bossAI.attack = slot.attack;
+  bossAI.attackT = slot.attackT;
+  try {
+    fn();
+  } finally {
+    slot.state = bossAI.state;
+    slot.attack = bossAI.attack;
+    slot.attackT = bossAI.attackT;
+    bossAI.state = sa; bossAI.attack = sb; bossAI.attackT = sc;
+  }
+}
+
+function runSlot(slot, dt) {
+  if (!slot.attack) return false;
+  const def = ATTACKS[slot.attack];
+  if (!def) return false;
+  // Increment slot timer up front to mimic updateBossAI's cadence.
+  slot.attackT += dt;
+  withSlotContext(slot, () => {
+    if (def.update) def.update(dt);
+  });
+  // Slots run forever in Phase 3 — we restart attacks as their
+  // duration loops, so we report "still active" always.
+  return true;
+}
+
+function tickSlot(slot, dt) {
+  if (!slot.attack) return;
+  const def = ATTACKS[slot.attack];
+  if (!def) return;
+  // If a slot's attack finished, restart it (combos run for the
+  // combo duration, not the individual attack durations).
+  if (slot.attackT >= def.duration) {
+    startSlot(slot, slot.attack);
+  }
+  runSlot(slot, dt);
+}
+
+// ---------- Phase 3 main update ----------
+function updatePhase3AI(dt) {
+  const p3 = bossAI.phase3;
+  if (!p3) return;
+
+  // Bark trigger (HP-threshold).
+  _phase3CheckBarks();
+  // Drain "please" pause if active — nothing else runs.
+  if (p3.pleasePauseT > 0) {
+    p3.pleasePauseT -= dt;
+    return;
+  }
+
+  // Final Attack at ~5% HP.
+  if (!p3.finalTriggered && boss.hp / boss.maxHp <= 0.05) {
+    _startFinalAttack();
+    return;
+  }
+  if (p3.finalTriggered) {
+    _updateFinalAttack(dt);
+    return;
+  }
+
+  // Modifier overlay (runs concurrent with combo).
+  _updateModifier(dt);
+
+  const hpFrac = boss.hp / boss.maxHp;
+
+  // SOUL_SCRAMBLE — one-shot ambush, scheduled once past 55% HP and
+  // fired mid-combo (so the new soul actually persists; combo-end
+  // would re-setState to the next combo's soul).
+  if (!p3.soulScrambleUsed) {
+    if (p3.scrambleDelay == null && hpFrac < 0.55) {
+      p3.scrambleDelay = 8 + Math.random() * 8; // 8–16s from now
+    }
+    if (p3.scrambleDelay != null) {
+      p3.scrambleDelay -= dt;
+      if (p3.scrambleDelay <= 0) {
+        p3.soulScrambleUsed = true;
+        _doSoulScramble();
+      }
+    }
+  }
+
+  // Run both combo slots in parallel.
+  tickSlot(p3.slot1, dt);
+  tickSlot(p3.slot2, dt);
+
+  // Combo cycle — each combo runs ~10 seconds, then we either insert
+  // a modifier or queue the next combo.
+  if (!p3._comboT) p3._comboT = 0;
+  p3._comboT += dt;
+  const COMBO_DUR = 10;
+  if (p3._comboT >= COMBO_DUR) {
+    p3._comboT = 0;
+    enemyBullets.length = 0;
+    p3.slot1.attack = null;
+    p3.slot2.attack = null;
+    // Decide whether to drop a modifier: every 2–3 combos.
+    p3.combosSinceMod = (p3.combosSinceMod || 0) + 1;
+    if (!p3.activeModifier && p3.combosSinceMod >= 2 && Math.random() < 0.6) {
+      _startModifier();
+      p3.combosSinceMod = 0;
+    }
+    // Pick next combo. Below 15% HP zero downtime.
+    p3.downtime = (hpFrac < 0.15) ? 0.0 : 0.6;
+    p3._pendingNext = _pickNextCombo();
+    p3._pendingDelay = p3.downtime;
+  }
+  if (p3._pendingNext != null) {
+    p3._pendingDelay -= dt;
+    if (p3._pendingDelay <= 0) {
+      startPhase3Combo(p3._pendingNext);
+      p3._pendingNext = null;
+    }
+  }
+}
+
+function _pickNextCombo() {
+  const p3 = bossAI.phase3;
+  const last = p3.comboHistory[p3.comboHistory.length - 1];
+  let idx;
+  do {
+    idx = Math.floor(Math.random() * PHASE3_COMBOS.length);
+  } while (idx === last);
+  return idx;
+}
+
+// ---------- Mid-combat barks ----------
+function _phase3CheckBarks() {
+  const p3 = bossAI.phase3;
+  const hpFrac = boss.hp / boss.maxHp;
+  for (let i = 0; i < PHASE3_BARKS.length; i++) {
+    const b = PHASE3_BARKS[i];
+    if (p3.barksFired[i]) continue;
+    if (hpFrac <= b.hp) {
+      p3.barksFired[i] = true;
+      _showBark(b);
+      break; // one bark at a time
+    }
+  }
+}
+
+function _showBark(bark) {
+  phase3Bark.active = true;
+  phase3Bark.text = bark.text;
+  phase3Bark.small = !!bark.small;
+  phase3Bark.pauseCombat = !!bark.pause;
+  phase3Bark.total = bark.pause ? 3.0 : 2.5;
+  phase3Bark.timer = phase3Bark.total;
+  if (bark.pause) {
+    bossAI.phase3.pleasePauseT = 3.0;
+    enemyBullets.length = 0;
+  }
+}
+
+function updatePhase3Bark(dt) {
+  if (!phase3Bark.active) return;
+  phase3Bark.timer -= dt;
+  if (phase3Bark.timer <= 0) {
+    phase3Bark.active = false;
+    phase3Bark.pauseCombat = false;
+  }
+}
+
+// ---------- Game-breaking modifiers ----------
+function _startModifier() {
+  const p3 = bossAI.phase3;
+  // ERROR_FLOOD should overlay a green soul combo at least once.
+  let pool = PHASE3_MODIFIERS.slice();
+  if (!p3.errorFloodUsedOnGreen && bossAI.soul === 'green') {
+    p3.activeModifier = 'ERROR_FLOOD';
+    p3.errorFloodUsedOnGreen = true;
+  } else {
+    p3.activeModifier = pool[Math.floor(Math.random() * pool.length)];
+  }
+  p3.modifierT = 0;
+  if (p3.activeModifier === 'BOX_CRUSH')        p3.modifierDur = 5.0;
+  else if (p3.activeModifier === 'TEXT_BOX_ASSAULT') p3.modifierDur = 6.0;
+  else if (p3.activeModifier === 'INVERSION')   p3.modifierDur = 6.0;
+  else if (p3.activeModifier === 'ERROR_FLOOD') {
+    p3.modifierDur = 5.0;
+    _spawnErrorPopups();
+  }
+}
+
+function _updateModifier(dt) {
+  const p3 = bossAI.phase3;
+  if (!p3.activeModifier) return;
+  p3.modifierT += dt;
+  if (p3.activeModifier === 'BOX_CRUSH') {
+    // Crush in over 1.5s, hold, expand back over 1.5s.
+    const t = p3.modifierT;
+    let f;                                  // 0 = full size, 1 = crushed
+    if (t < 1.5)      f = t / 1.5;
+    else if (t < 3.5) f = 1;
+    else              f = Math.max(0, 1 - (t - 3.5) / 1.5);
+    const wShrink = ARENA_DEFAULT.w * 0.45 * f;
+    ARENA.x = ARENA_DEFAULT.x + wShrink / 2;
+    ARENA.w = ARENA_DEFAULT.w - wShrink;
+  } else if (p3.activeModifier === 'TEXT_BOX_ASSAULT') {
+    // Stream of bullets rising from below the arena, removing the
+    // bottom third. Spawn at the bottom edge moving up.
+    if (Math.random() < 0.65) {
+      const bx = ARENA.x + Math.random() * ARENA.w;
+      spawnBullet(bx, ARENA.y + ARENA.h + 6, 0, -110 * P2_SPEED,
+                  { color: '#ffaa00' });
+    }
+  } else if (p3.activeModifier === 'ERROR_FLOOD') {
+    // Popups handled at render time; no per-tick spawning.
+  }
+  // INVERSION is purely visual — applied at render.
+
+  if (p3.modifierT >= p3.modifierDur) {
+    _endModifier();
+  }
+}
+
+function _endModifier() {
+  const p3 = bossAI.phase3;
+  if (p3.activeModifier === 'BOX_CRUSH') {
+    ARENA.x = ARENA_DEFAULT.x;
+    ARENA.w = ARENA_DEFAULT.w;
+  } else if (p3.activeModifier === 'ERROR_FLOOD') {
+    errorFlood.active = false;
+    errorFlood.popups = [];
+  }
+  p3.activeModifier = null;
+  p3.modifierT = 0;
+}
+
+function _spawnErrorPopups() {
+  errorFlood.active = true;
+  errorFlood.popups = [];
+  const N = 5;
+  const titles = [
+    'ERROR', 'WARNING', 'SYSTEM', 'NULL POINTER', 'STACK OVERFLOW',
+  ];
+  const bodies = [
+    'A program has performed an illegal operation.',
+    'POLLUTION_MAN.EXE has stopped responding.',
+    'Cannot find file: PROMISE.DLL',
+    'Insufficient memory to continue execution.',
+    'The process cannot access the file because it is being used by another process.',
+  ];
+  for (let i = 0; i < N; i++) {
+    errorFlood.popups.push({
+      x: 60 + Math.random() * (CANVAS_W - 240),
+      y: 120 + Math.random() * (CANVAS_H - 280),
+      w: 180,
+      h: 90,
+      title: titles[i % titles.length],
+      body: bodies[i % bodies.length],
+    });
+  }
+}
+
+function _doSoulScramble() {
+  // Pick the worst possible transition. Heuristic: any color that
+  // isn't the current one.
+  const others = SOUL_ORDER.filter(s => s !== bossAI.soul);
+  const next = others[Math.floor(Math.random() * others.length)];
+  bossAI.soul = next;
+  setState(SOUL_TO_STATE[next]);
+  // No telegraph by design — that's the ambush.
+}
+
+// ---------- Final Attack ----------
+function _startFinalAttack() {
+  const p3 = bossAI.phase3;
+  p3.finalTriggered = true;
+  p3.finalStep = 0;
+  p3.finalT = 0;
+  // Clear modifiers and combos.
+  if (p3.activeModifier) _endModifier();
+  enemyBullets.length = 0;
+  p3.slot1.attack = null;
+  p3.slot2.attack = null;
+  boss.invincible = true; // boss locked through the final attack
+  _enterFinalStep(0);
+}
+
+function _enterFinalStep(idx) {
+  const p3 = bossAI.phase3;
+  const step = FINAL_ATTACK_SEQUENCE[idx];
+  setState(SOUL_TO_STATE[step.soul]);
+  bossAI.soul = step.soul;
+  enemyBullets.length = 0;
+  startSlot(p3.slot1, step.a1);
+  startSlot(p3.slot2, step.a2);
+  p3.finalT = 0;
+}
+
+function _updateFinalAttack(dt) {
+  const p3 = bossAI.phase3;
+  if (p3.finalDone) {
+    // Boss stands still, vulnerable. Player auto-fire kills him.
+    boss.invincible = false;
+    return;
+  }
+  p3.finalT += dt;
+  tickSlot(p3.slot1, dt);
+  tickSlot(p3.slot2, dt);
+  if (p3.finalT >= 8.0) {
+    p3.finalStep++;
+    if (p3.finalStep >= FINAL_ATTACK_SEQUENCE.length) {
+      // Done — silence beat, then expose.
+      p3.finalDone = true;
+      p3.slot1.attack = null;
+      p3.slot2.attack = null;
+      enemyBullets.length = 0;
+      boss.invincible = false;
+    } else {
+      _enterFinalStep(p3.finalStep);
+    }
+  }
+}
+
+// ---------- Phase 3 rendering ----------
+function drawPhase3Attacks() {
+  const p3 = bossAI.phase3;
+  if (!p3) return;
+  for (const slot of [p3.slot1, p3.slot2]) {
+    if (!slot.attack) continue;
+    const def = ATTACKS[slot.attack];
+    if (!def || !def.draw) continue;
+    withSlotContext(slot, () => def.draw());
+  }
+}
+
+function drawPhase3Bark() {
+  if (!phase3Bark.active) return;
+  const t = phase3Bark.timer;
+  const fade = t < 0.5 ? Math.max(0, t / 0.5)
+             : (phase3Bark.total - t < 0.3 ? Math.max(0, (phase3Bark.total - t) / 0.3) : 1);
+  ctx.save();
+  if (phase3Bark.small) {
+    // "please" — small lowercase, centered, no flair.
+    ctx.globalAlpha = fade;
+    ctx.font = '20px "Courier New", monospace';
+    ctx.fillStyle = '#ff5050';
+    ctx.textAlign = 'center';
+    ctx.fillText(phase3Bark.text, CANVAS_W / 2, CANVAS_H / 2);
+  } else {
+    ctx.globalAlpha = fade;
+    ctx.font = 'bold 22px "Courier New", monospace';
+    ctx.fillStyle = '#ff2828';
+    ctx.textAlign = 'center';
+    const sx = (Math.random() - 0.5) * 1.6;
+    const sy = (Math.random() - 0.5) * 1.4;
+    ctx.fillText(phase3Bark.text, CANVAS_W / 2 + sx, ARENA.y - 36 + sy);
+  }
+  ctx.restore();
+}
+
+function drawPhase3Modifier() {
+  const p3 = bossAI.phase3;
+  if (!p3 || !p3.activeModifier) return;
+  if (p3.activeModifier === 'BOX_CRUSH') {
+    // Squeeze indicator — pulsing red borders pushing inward.
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 80, 80, 0.85)';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(ARENA.x - 1.5, ARENA.y - 1.5, ARENA.w + 3, ARENA.h + 3);
+    ctx.restore();
+  }
+  // INVERSION rendering is applied as a transform around the whole frame.
+  // ERROR_FLOOD is drawn over everything separately.
+}
+
+function drawErrorFlood() {
+  if (!errorFlood.active) return;
+  ctx.save();
+  for (const p of errorFlood.popups) {
+    // Win95-style title bar
+    ctx.fillStyle = '#c0c0c0';
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+    ctx.fillStyle = '#000080';
+    ctx.fillRect(p.x, p.y, p.w, 16);
+    ctx.font = 'bold 11px "Courier New", monospace';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'left';
+    ctx.fillText(p.title, p.x + 6, p.y + 12);
+    // Close button
+    ctx.fillStyle = '#c0c0c0';
+    ctx.fillRect(p.x + p.w - 16, p.y + 2, 12, 12);
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(p.x + p.w - 16 + 0.5, p.y + 2.5, 12, 12);
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText('×', p.x + p.w - 13, p.y + 12);
+    // Icon (red X)
+    ctx.fillStyle = '#cc0000';
+    ctx.fillRect(p.x + 8, p.y + 26, 20, 20);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillText('!', p.x + 16, p.y + 41);
+    // Body
+    ctx.fillStyle = '#000';
+    ctx.font = '10px "Courier New", monospace';
+    _wrapInBox(p.body, p.x + 36, p.y + 28, p.w - 44, 12);
+    // OK button
+    ctx.fillStyle = '#c0c0c0';
+    ctx.fillRect(p.x + p.w / 2 - 24, p.y + p.h - 22, 48, 16);
+    ctx.strokeStyle = '#000';
+    ctx.strokeRect(p.x + p.w / 2 - 24 + 0.5, p.y + p.h - 22 + 0.5, 48, 16);
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('OK', p.x + p.w / 2, p.y + p.h - 10);
+  }
+  ctx.restore();
+}
+
+function _wrapInBox(text, x, y, maxW, lineH) {
+  const words = text.split(' ');
+  let line = '';
+  let cy = y;
+  for (let i = 0; i < words.length; i++) {
+    const test = line ? line + ' ' + words[i] : words[i];
+    if (ctx.measureText(test).width > maxW && line) {
+      ctx.fillText(line, x, cy);
+      line = words[i];
+      cy += lineH;
+    } else {
+      line = test;
+    }
+  }
+  if (line) ctx.fillText(line, x, cy);
+}
+
+// True while the canvas should render upside-down for INVERSION.
+function isInverted() {
+  return bossAI.phase3 && bossAI.phase3.activeModifier === 'INVERSION';
+}
+
+// =============================================================
+//  DEFEAT (theatrical) — replaces the standard "VICTORY!" overlay
+//  for Phase 3 boss kills. Spec: white "you promised me" on red,
+//  hold 5s, fade to black for 3s, redirect to kids zone.
+// =============================================================
+
+const defeatSeq = {
+  active: false,
+  t: 0,
+  redirected: false,
+};
+
+function startDefeatSequence() {
+  defeatSeq.active = true;
+  defeatSeq.t = 0;
+  defeatSeq.redirected = false;
+  stopAllMusic();
+  enemyBullets.length = 0;
+  playerBullets.length = 0;
+  cutscene.active = false;
+  game.victory = true; // engine flag — keeps the game halted
+  // Suppress the normal VICTORY overlay while defeatSeq is active.
+}
+
+function updateDefeatSequence(dt) {
+  if (!defeatSeq.active) return;
+  defeatSeq.t += dt;
+  if (defeatSeq.t >= 8.0 && !defeatSeq.redirected) {
+    defeatSeq.redirected = true;
+    try { window.location.href = '../kids-zone.html'; } catch (e) {}
+  }
+}
+
+function drawDefeatSequence() {
+  if (!defeatSeq.active) return;
+  const t = defeatSeq.t;
+  ctx.save();
+  if (t < 5.0) {
+    // Red wash + white "you promised me".
+    const a = t < 0.5 ? t / 0.5 : 1.0;
+    ctx.fillStyle = 'rgba(60, 0, 0, ' + (a * 0.9).toFixed(2) + ')';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    ctx.fillStyle = 'rgba(140, 0, 0, ' + a.toFixed(2) + ')';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    ctx.font = 'bold 32px "Courier New", monospace';
+    ctx.fillStyle = 'rgba(255, 255, 255, ' + a.toFixed(2) + ')';
+    ctx.textAlign = 'center';
+    ctx.fillText('you promised me', CANVAS_W / 2, CANVAS_H / 2);
+  } else if (t < 5.6) {
+    // Text fades.
+    const f = 1 - (t - 5.0) / 0.6;
+    ctx.fillStyle = 'rgba(140, 0, 0, ' + Math.max(f, 0).toFixed(2) + ')';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    ctx.fillStyle = 'rgba(255, 255, 255, ' + Math.max(f, 0).toFixed(2) + ')';
+    ctx.font = 'bold 32px "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('you promised me', CANVAS_W / 2, CANVAS_H / 2);
+    ctx.fillStyle = 'rgba(0, 0, 0, ' + (1 - f).toFixed(2) + ')';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  } else {
+    // Black screen, 3s of silence.
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  }
+  ctx.restore();
+}
+
 // ---------- Replaces the old sweep-only updateBoss ----------
 function updateBoss(dt) {
   if (boss.flashTimer > 0) boss.flashTimer -= dt;
@@ -3083,15 +3732,17 @@ function updateBoss(dt) {
       playCutscene(getPhase2To3(), () => {
         startPhase(3);
         resetBossAI();
+        startPhase3();
       });
       return;
     }
     updatePhase2AI(dt);
     // Keep purple wave timer ticking in render even outside attacks.
     if (bossAI.purpleWave) bossAI.purpleWave.t += dt;
+  } else if (game.phase === 3) {
+    updatePhase3AI(dt);
+    if (bossAI.purpleWave) bossAI.purpleWave.t += dt;
   } else {
-    // Phase 3 attack patterns are a next pass — for now boss just
-    // sweeps so the defeat cutscene still triggers on hp = 0.
     bossSweep(dt);
   }
 }
@@ -3141,10 +3792,13 @@ function checkCollisions() {
             playCutscene(getPhase2To3(), () => {
               startPhase(3);
               resetBossAI();
+              startPhase3();
             });
+          } else if (game.phase === 3) {
+            // Phase 3 boss death — theatrical defeat with reboot.
+            startDefeatSequence();
           } else {
-            // Phase 1 (won't actually happen — Phase 1 transitions
-            // earlier on hpFrac threshold) and Phase 3 land here.
+            // Fallback (Phase 1 won't actually reach here).
             playCutscene(getDefeatLines(), () => {
               stopAllMusic();
               game.victory = true;
@@ -3686,22 +4340,39 @@ function render() {
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
+  // INVERSION (Phase 3 modifier) flips the entire frame.
+  const inverted = isInverted();
+  if (inverted) {
+    ctx.save();
+    ctx.translate(CANVAS_W, CANVAS_H);
+    ctx.scale(-1, -1);
+  }
+
   drawStars();
   drawBoss();
   drawArena();
   drawBossAttacks();
+  drawPhase3Attacks();
   drawPlayer();
   drawBullets();
+  drawPhase3Modifier();
+
+  if (inverted) ctx.restore();
+
+  // HUD and overlays render right-side-up regardless of inversion.
   drawHUD();
   drawSoulSwitch();
   drawGauntletIntro();
   drawGauntletSilence();
+  drawPhase3Bark();
+  drawErrorFlood();
   drawCutscene();
   drawNowPlaying();
+  drawDefeatSequence();
 
   if (game.over) {
     drawOverlay('GAME OVER', 'Press SPACE to retry');
-  } else if (game.victory) {
+  } else if (game.victory && !defeatSeq.active) {
     drawOverlay('VICTORY!', 'Press SPACE to play again');
   } else if (game.paused && !cutscene.active) {
     drawOverlay(
@@ -3722,9 +4393,15 @@ function frame(now) {
 
   updateStars(dt);
   updateNowPlaying(dt);
+  updatePhase3Bark(dt);
+  updateDefeatSequence(dt);
 
   if (cutscene.active) {
     updateCutscene(dt);
+  } else if (defeatSeq.active) {
+    // Defeat sequence runs to its own clock — no combat updates.
+  } else if (phase3Bark.active && phase3Bark.pauseCombat) {
+    // "please" bark pauses combat.
   } else if (!game.paused && !game.over && !game.victory) {
     updatePlayer(dt);
     updateBoss(dt);
