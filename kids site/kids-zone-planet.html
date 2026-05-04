@@ -2573,20 +2573,40 @@ Object.assign(ATTACKS, {
   // A solid vertical bar sweeps across the lanes; alternates side.
   LINE_SWEEP: {
     name: 'LINE SWEEP',
-    duration: 6.5,
+    duration: 11.0,
     init() {
+      bossAI.state.phase = 'telegraph';
+      bossAI.state.t = 0;
       bossAI.state.sweepIdx = 0;
+      bossAI.state.dir = 1;             // first sweep goes L → R
       bossAI.state.barX = ARENA.x;
-      bossAI.state.dir = 1;
       bossAI.state.spawnT = 0;
     },
     update(dt) {
       const s = bossAI.state;
       bossSweep(dt, 0.3);
-      const speed = (140 + s.sweepIdx * 30) * P2_SPEED;
+      s.t += dt;
+
+      // 1.0s telegraph before each sweep — gives the player a beat
+      // to position at the opposite edge from where the bar will
+      // start, otherwise they can't possibly stay ahead.
+      if (s.phase === 'telegraph') {
+        if (s.t >= 1.0) {
+          s.phase = 'sweeping';
+          s.t = 0;
+          s.spawnT = 0;
+          s.barX = (s.dir === 1) ? ARENA.x : ARENA.x + ARENA.w;
+        }
+        return;
+      }
+
+      // Slightly gentler escalation than before so the player can
+      // physically outrun the bar on every sweep — was 140/170/200
+      // (last sweep faster than player), now 140/160/180.
+      const speed = (140 + s.sweepIdx * 20) * P2_SPEED;
       s.barX += s.dir * speed * dt;
-      // Spawn vertical bar continuously by laying down stationary
-      // bullets along the column at the bar's current x.
+
+      // Lay down stationary bar bullets at the current x.
       s.spawnT += dt;
       if (s.spawnT >= 0.05) {
         s.spawnT = 0;
@@ -2594,8 +2614,9 @@ Object.assign(ATTACKS, {
           spawnBullet(s.barX, purpleLineY(i), 0, 0, { color: '#c845ff' });
         }
       }
-      // Bar hits the opposite edge — clear leftover stationary bar
-      // bullets and start a new sweep.
+
+      // Bar exits the opposite edge — clear all leftover bar bullets
+      // and either telegraph the next sweep or end the attack.
       if ((s.dir === 1 && s.barX > ARENA.x + ARENA.w + 4) ||
           (s.dir === -1 && s.barX < ARENA.x - 4)) {
         for (let j = enemyBullets.length - 1; j >= 0; j--) {
@@ -2606,16 +2627,35 @@ Object.assign(ATTACKS, {
         }
         s.sweepIdx++;
         s.dir *= -1;
-        s.barX = (s.dir === 1) ? ARENA.x : ARENA.x + ARENA.w;
-        if (s.sweepIdx >= 3) bossAI.attackT = ATTACKS.LINE_SWEEP.duration;
+        if (s.sweepIdx >= 3) {
+          bossAI.attackT = ATTACKS.LINE_SWEEP.duration;
+        } else {
+          s.phase = 'telegraph';
+          s.t = 0;
+        }
       }
     },
     draw() {
       const s = bossAI.state;
       if (!s) return;
       ctx.save();
-      ctx.fillStyle = 'rgba(200, 80, 255, 0.5)';
-      ctx.fillRect(s.barX - 4, ARENA.y, 8, ARENA.h);
+      if (s.phase === 'telegraph') {
+        // Pulsing warning bar at the start position of the upcoming
+        // sweep, plus a directional arrow so the player knows which
+        // way to flee.
+        const startX = (s.dir === 1) ? ARENA.x + 4 : ARENA.x + ARENA.w - 4;
+        const pulse = 0.45 + 0.35 * Math.sin(s.t * 16);
+        ctx.fillStyle = 'rgba(200, 80, 255, ' + (pulse * 0.55).toFixed(2) + ')';
+        ctx.fillRect(startX - 4, ARENA.y, 8, ARENA.h);
+        ctx.font = 'bold 16px "Courier New", monospace';
+        ctx.fillStyle = 'rgba(255, 220, 255, ' + pulse.toFixed(2) + ')';
+        ctx.textAlign = 'center';
+        const arrow = s.dir === 1 ? '►' : '◄';
+        ctx.fillText(arrow, startX + s.dir * 18, ARENA.y + ARENA.h / 2 + 4);
+      } else {
+        ctx.fillStyle = 'rgba(200, 80, 255, 0.5)';
+        ctx.fillRect(s.barX - 4, ARENA.y, 8, ARENA.h);
+      }
       ctx.restore();
     },
   },
