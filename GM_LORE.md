@@ -528,14 +528,90 @@ other on session 4. Pick a ruling per table; record it.
     Basement World inside their respective boundaries.
 - **Kids Zone** (`kids-zone.html`) — three tabs:
   - **Home** — period-style "welcome to the Kids Zone" landing.
-  - **Chat** — links to `kids-zone-knowitall.html` and
-    `kids-zone-claire.html` (game stubs — to be implemented).
+  - **Chat** — links to `kids site/kids-zone-knowitall.html` and
+    `kids site/kids-zone-claire.html` (live LLM-backed chatbots —
+    see Chatbot Setup below).
   - **Games** — links to `kids-zone-planet.html` (Captain Planet
     Saves the Day) and `kids-zone-basement.html` (Escape Basement
     World) (game stubs — to be implemented).
   Slug `kids-zone` is added to the gateway bookmarks bar on first
   visit, but the page is **not** in the search index — the only
   intended path to it is via the terminal's Local Server icon.
+
+### Chatbot Setup (Mr. Know It All & Madame Claire)
+
+Both chatbots are **Claude API-backed**, served through the Node
+server's `/api/chat` endpoint. Configuration:
+
+- **Required env var:** `ANTHROPIC_API_KEY` — set in Railway's
+  service variables. Without it, the `/api/chat` endpoint returns
+  HTTP 503 with a friendly "tell your GM the API key is missing"
+  message; the chat UI surfaces it inline. The static site keeps
+  working — only the bots break.
+- **Optional env vars:**
+  - `ANTHROPIC_MODEL` — defaults to `claude-sonnet-4-6`. Override
+    to `claude-haiku-4-5` for cheaper/faster but less nuanced
+    chat, or `claude-opus-4-7` for max quality.
+  - `CHAT_MAX_TOKENS` — per-reply ceiling, default `1024`.
+  - `CHAT_MAX_TURNS` — turn cap per request (older turns trimmed),
+    default `60`. Mr. Know It All's full 4-round game is ~40 turns,
+    so 60 leaves headroom; Claire's 6-message reading is well under.
+  - `CHAT_RATE_MAX` — per-IP messages per minute, default `30`.
+- **System prompts** are loaded at server startup from
+  `kids site/Mr. know it all prompt.md` and
+  `kids site/claire_revised_prompt.md`. The server extracts the
+  first triple-backtick block from each file. The `.md` extension
+  is blocked from being served, so players can't read the prompts.
+- **Prompt caching** is enabled via `cache_control: ephemeral` on
+  the system block. The prompts are ~3K tokens — above Sonnet
+  4.6's 2048-token cache minimum but below Haiku 4.5's 4096-token
+  minimum. Caching fires on Sonnet/Opus, no-op on Haiku.
+
+#### Mr. Know It All — game flow & special handling
+
+The chat UI implements two pieces of behavior the prompt requires:
+
+- **Per-question timer.** 30 seconds for rounds 1–3, 60 seconds
+  for round 4. The timer resets after each bot reply. If it
+  expires:
+  - If the player typed something, that text is submitted.
+  - Otherwise the literal string `[PLAYER RAN OUT OF TIME]` is
+    sent in their place. The prompt's TIMEOUTS section tells
+    Mr. K to react with the same energy as a wrong answer in
+    rounds 1–3, and as `[PLAYER RESPONDED]` in round 4.
+- **Round 4 privacy.** Once the bot enters Round 4 ("JUST BETWEEN
+  US"), the UI keeps showing the player's actual answers in their
+  own bubble, but **substitutes the literal string
+  `[PLAYER RESPONDED]` when sending to Claude.** The model never
+  sees the player's confessions — exactly what the prompt's
+  RESPONSE HANDLING section instructs.
+- **End detection.** The phrase fragment `I Know It All, after
+  all` triggers session end — input locks, "show is over" banner.
+- **Round detection.** UI watches for "ROUND 1/2/3/4" or the
+  named round titles in bot text and updates the on-screen banner.
+
+#### Madame Claire — reading flow
+
+- **Hardcoded intro.** Per the prompt, Claude does **not** generate
+  the first message. The UI shows the literal hardcoded greeting
+  ("Welcome, dear. Sit. Let me look at you...") on splash dismiss,
+  then waits for the player to type their name and birthday.
+- **3 phases, 6 messages total** (intro + 3 round-trips):
+  - Phase 1 — THE STARS (horoscope from name+birthday)
+  - Phase 2 — THE CARDS (player tells Claire 3 tarot cards they drew
+    from a real physical deck)
+  - Phase 3 — THE GLASS (vision/prediction)
+- **Phase banner** updates on each assistant turn so the player
+  knows where they are.
+- **End detection.** The phrase fragment `wonder what that could
+  mean` triggers session end.
+- **No timer** — Claire is unhurried by design.
+
+#### Music
+
+Both pages share `kids site/TV Odyssey Games.mp3`, played on loop at
+~30–35% volume after the player clicks the splash-screen Begin
+button (autoplay requires user gesture in modern browsers).
 - **Hidden WDLK-TV staff page**: visit `wdlk-tv.html#staff` or
   `wdlk-tv.html?page=staff`. Also reachable from the schedule's
   Friday-midnight `S/T-7` cell.
