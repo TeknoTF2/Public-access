@@ -111,7 +111,7 @@ canvas {
 
 <div class="game-area">
   <div class="canvas-wrap">
-    <canvas id="game" width="640" height="480"></canvas>
+    <canvas id="game" width="640" height="540"></canvas>
   </div>
   <div class="hint">
     &uarr;&darr;&larr;&rarr; move &nbsp;&middot;&nbsp; SPACE pause/advance &nbsp;&middot;&nbsp; ESC pause
@@ -144,7 +144,7 @@ canvas {
 
 // ---------- Canvas ----------
 const CANVAS_W = 640;
-const CANVAS_H = 480;
+const CANVAS_H = 540;
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
@@ -392,6 +392,8 @@ function playCutscene(lines, onDone) {
   cutscene.done = false;
   cutscene.holdT = 0;
   cutscene.onDone = onDone || null;
+  cutscene.pages = [''];
+  cutscene.pageIndex = 0;
   player.invincible = true;
   boss.invincible = true;
   // Wipe all in-flight bullets; nobody fires during a cutscene.
@@ -412,32 +414,123 @@ function playCutscene(lines, onDone) {
   // after the cutscene ends so they can't punch through the
   // post-cutscene transition with a free shot.
   player.fireCooldown = PLAYER_FIRE_INTERVAL * 4;
+  _enterCutsceneLine();
+}
+
+// ---------- Pagination ----------
+// Long dialogue lines are pre-wrapped to fit the text box and split
+// into pages of N visual lines. Each page types in like a regular
+// line and the player advances pages with space/enter.
+const TEXT_BOX_W = 460;
+const TEXT_BOX_H = 70;
+const TEXT_BOX_PAD = 12;
+const TEXT_BOX_LINE_H = 18;
+const TEXT_BOX_FONT = '14px "Courier New", monospace';
+const TEXT_BOX_LINES_PER_PAGE = 2;
+const RED_BOX_FONT = 'bold 22px "Courier New", monospace';
+const RED_BOX_LINE_H = 26;
+const RED_BOX_LINES_PER_PAGE = 2;
+const RED_BOX_MAX_W = 580;
+
+function _wrapToLines(text, maxW, font) {
+  ctx.save();
+  ctx.font = font;
+  const words = (text || '').split(' ');
+  const lines = [];
+  let line = '';
+  for (const word of words) {
+    const test = line ? line + ' ' + word : word;
+    if (ctx.measureText(test).width > maxW && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = test;
+    }
+  }
+  if (line) lines.push(line);
+  ctx.restore();
+  return lines;
+}
+
+function _paginate(text, maxW, font, linesPerPage) {
+  const lines = _wrapToLines(text, maxW, font);
+  if (lines.length === 0) return [''];
+  const pages = [];
+  for (let i = 0; i < lines.length; i += linesPerPage) {
+    pages.push(lines.slice(i, i + linesPerPage).join('\n'));
+  }
+  return pages;
+}
+
+function _enterCutsceneLine() {
+  const line = cutscene.lines[cutscene.index];
+  if (!line) {
+    cutscene.pages = [''];
+    cutscene.pageIndex = 0;
+    cutscene.charT = 0;
+    cutscene.done = false;
+    cutscene.holdT = 0;
+    return;
+  }
+  if (line.silent) {
+    cutscene.pages = [''];
+  } else {
+    const isRed = line.speaker === 'red';
+    const maxW = isRed ? RED_BOX_MAX_W : TEXT_BOX_W - 2 * TEXT_BOX_PAD;
+    const font = isRed ? RED_BOX_FONT : TEXT_BOX_FONT;
+    const lpp = isRed ? RED_BOX_LINES_PER_PAGE : TEXT_BOX_LINES_PER_PAGE;
+    cutscene.pages = _paginate(line.text || '', maxW, font, lpp);
+  }
+  cutscene.pageIndex = 0;
+  cutscene.charT = 0;
+  cutscene.done = false;
+  cutscene.holdT = 0;
+}
+
+function _currentPageText() {
+  return (cutscene.pages && cutscene.pages[cutscene.pageIndex]) || '';
+}
+
+function _isLastPage() {
+  return cutscene.pages
+      && cutscene.pageIndex >= cutscene.pages.length - 1;
 }
 
 function advanceCutscene() {
   if (!cutscene.active) return;
   const line = cutscene.lines[cutscene.index] || {};
+  const pageText = _currentPageText();
+
   if (!cutscene.done) {
-    // Reveal the rest of this line instantly. (Silent lines have
-    // no text to skip — they advance only when the post-hold ends.)
+    // Skip typing animation — fully reveal the current page.
     if (!line.silent) {
-      cutscene.charT = (line.text || '').length;
+      cutscene.charT = pageText.length;
       cutscene.done = true;
       cutscene.holdT = 0;
     }
     return;
   }
-  // For lines with pauseAfter, wait out the hold before honoring an
-  // advance press.
-  const required = line.pauseAfter || 0;
+
+  // pauseAfter only applies after the LAST page of the line.
+  const lastPage = _isLastPage();
+  const required = lastPage ? (line.pauseAfter || 0) : 0;
   if (cutscene.holdT < required) return;
+
+  if (!lastPage) {
+    // Advance to the next page within this line.
+    cutscene.pageIndex += 1;
+    cutscene.charT = 0;
+    cutscene.done = false;
+    cutscene.holdT = 0;
+    return;
+  }
+
+  // Move to the next dialogue line.
   cutscene.index += 1;
   if (cutscene.index >= cutscene.lines.length) {
     endCutscene();
   } else {
-    cutscene.charT = 0;
-    cutscene.done = false;
-    cutscene.holdT = 0;
+    _enterCutsceneLine();
   }
 }
 
@@ -448,6 +541,8 @@ function endCutscene() {
   cutscene.index = 0;
   cutscene.charT = 0;
   cutscene.done = false;
+  cutscene.pages = [''];
+  cutscene.pageIndex = 0;
   cutscene.onDone = null;
   player.invincible = false;
   boss.invincible = false;
@@ -682,6 +777,16 @@ window.addEventListener('keydown', (e) => {
     if (game.paused || game.over || game.victory) {
       unpause();
       return;
+    }
+    return;
+  }
+
+  // Debug: Shift + E restores player HP to full (3/3).
+  if (e.shiftKey && (e.key === 'E' || e.key === 'e')) {
+    e.preventDefault();
+    if (!game.over && !game.victory) {
+      player.hp = player.maxHp;
+      player.iframes = POST_HIT_IFRAMES;
     }
     return;
   }
@@ -1086,7 +1191,7 @@ const ATTACKS = {
       bossSweep(dt, 1.1);
       s.streamT += dt;
       s.aimT += dt;
-      if (s.streamT >= 0.16) {
+      if (s.streamT >= 0.22) {
         s.streamT = 0;
         const speed = 130 * bossAI.bulletSpeedMul;
         for (let i = 0; i < s.nozzleX.length; i++) {
@@ -3888,6 +3993,7 @@ function updateCutscene(dt) {
   if (!cutscene.active) return;
   const line = cutscene.lines[cutscene.index];
   if (!line) return;
+  const pageText = _currentPageText();
 
   if (!cutscene.done) {
     if (line.silent) {
@@ -3898,8 +4004,8 @@ function updateCutscene(dt) {
     } else {
       const cps = line.typingCps || CUTSCENE_TYPING_CPS;
       cutscene.charT += cps * dt;
-      if (cutscene.charT >= line.text.length) {
-        cutscene.charT = line.text.length;
+      if (cutscene.charT >= pageText.length) {
+        cutscene.charT = pageText.length;
         cutscene.done = true;
         cutscene.holdT = 0;
       }
@@ -3907,9 +4013,11 @@ function updateCutscene(dt) {
     return;
   }
 
-  // Line finished. Advance the post-line hold timer. Silent lines
-  // auto-advance once their hold expires; spoken lines wait for input.
+  // Page finished. Advance the post-page hold timer. Silent lines
+  // auto-advance once their hold expires; spoken lines wait for the
+  // player to advance.
   cutscene.holdT += dt;
+  const lastPage = _isLastPage();
   if (line.silent) {
     const need = line.pauseAfter || 0.8;
     if (cutscene.holdT >= need) {
@@ -3917,13 +4025,13 @@ function updateCutscene(dt) {
       if (cutscene.index >= cutscene.lines.length) {
         endCutscene();
       } else {
-        cutscene.charT = 0;
-        cutscene.done = false;
-        cutscene.holdT = 0;
+        _enterCutsceneLine();
       }
     }
-  } else if (line.pauseAfter && line.speaker === 'red' && cutscene.index === cutscene.lines.length - 1) {
-    // Final defeat line auto-advances after its pauseAfter.
+  } else if (line.pauseAfter && line.speaker === 'red'
+             && cutscene.index === cutscene.lines.length - 1
+             && lastPage) {
+    // Final defeat line auto-advances after its pauseAfter (last page).
     if (cutscene.holdT >= line.pauseAfter) {
       cutscene.index += 1;
       if (cutscene.index >= cutscene.lines.length) endCutscene();
@@ -4170,15 +4278,17 @@ function drawHUD() {
   ctx.fillText('[' + player.state.toUpperCase() + ']', CANVAS_W - 20, CANVAS_H - 22);
 }
 
-function drawTextBox(speaker, text, fullText, glitch) {
-  if (speaker === 'red') { drawRedBox(text, fullText); return; }
+function drawTextBox(speaker, text, fullText, glitch, isLastPage) {
+  if (speaker === 'red') { drawRedBox(text, fullText, isLastPage); return; }
 
   // Position: above arena for boss, below arena for player.
   const isBoss = speaker === 'boss';
-  const w = 460;
-  const h = 70;
+  const w = TEXT_BOX_W;
+  const h = TEXT_BOX_H;
   const x = (CANVAS_W - w) / 2;
-  const y = isBoss ? ARENA.y - h - 14 : ARENA.y + ARENA.h + 14;
+  let y = isBoss ? ARENA.y - h - 14 : ARENA.y + ARENA.h + 14;
+  // Clamp player text box to canvas bounds.
+  if (!isBoss) y = Math.min(y, CANVAS_H - h - 8);
 
   // Backing
   ctx.fillStyle = 'rgba(0, 0, 0, 0.92)';
@@ -4193,38 +4303,25 @@ function drawTextBox(speaker, text, fullText, glitch) {
   ctx.fillStyle = isBoss ? '#c845ff' : '#3a9bff';
   ctx.fillText(isBoss ? 'POLLUTION MAN' : 'CAPTAIN PLANET', x + 10, y + 18);
 
-  // Text
-  ctx.font = '14px "Courier New", monospace';
+  // Text — pages are pre-wrapped; render each line of the page.
+  ctx.font = TEXT_BOX_FONT;
   ctx.fillStyle = '#ffffff';
-  wrapText(text, x + 10, y + 38, w - 20, 18);
+  const pageLines = text.split('\n');
+  for (let i = 0; i < pageLines.length; i++) {
+    ctx.fillText(pageLines[i], x + TEXT_BOX_PAD,
+                 y + 36 + i * TEXT_BOX_LINE_H);
+  }
 
-  // Continue indicator when line is fully revealed
+  // Continue indicator: ▶ if more pages remain, ▼ for the final page.
   if (text.length === fullText.length) {
     ctx.fillStyle = '#ffd900';
     const t = performance.now() / 250;
-    const ind = (Math.sin(t) > 0) ? '▼' : ' ';
+    const blink = Math.sin(t) > 0;
+    const ind = blink ? (isLastPage ? '▼' : '▶') : ' ';
     ctx.font = '14px "Courier New", monospace';
     ctx.textAlign = 'right';
-    ctx.fillText(ind, x + w - 10, y + h - 10);
+    ctx.fillText(ind, x + w - 10, y + h - 8);
   }
-}
-
-function wrapText(text, x, y, maxW, lineH) {
-  const words = text.split(' ');
-  let line = '';
-  let cy = y;
-  for (let i = 0; i < words.length; i++) {
-    const test = line ? line + ' ' + words[i] : words[i];
-    const m = ctx.measureText(test);
-    if (m.width > maxW && line) {
-      ctx.fillText(line, x, cy);
-      line = words[i];
-      cy += lineH;
-    } else {
-      line = test;
-    }
-  }
-  if (line) ctx.fillText(line, x, cy);
 }
 
 function drawCutscene() {
@@ -4232,34 +4329,47 @@ function drawCutscene() {
   const line = cutscene.lines[cutscene.index];
   if (!line) return;
   if (line.silent) return; // empty held beat
-  const shown = line.text.slice(0, Math.floor(cutscene.charT));
-  drawTextBox(line.speaker, shown, line.text, line.glitch);
+  const pageText = _currentPageText();
+  const shown = pageText.slice(0, Math.floor(cutscene.charT));
+  drawTextBox(line.speaker, shown, pageText, line.glitch, _isLastPage());
 }
 
 // "[RED]: ..." takeover lines get raw red text on a black wash —
-// no rounded box, no speaker label. Slight jitter for menace.
-function drawRedBox(text, fullText) {
-  // Full-screen red wash (subtle).
+// no rounded box, no speaker label. Slight jitter for menace. Pages
+// are pre-wrapped; render each line stacked.
+function drawRedBox(text, fullText, isLastPage) {
   ctx.save();
+  // Vertical wash sized for up to 2 lines of red text.
+  const washTop = ARENA.y - 110;
+  const washH   = 130;
   ctx.fillStyle = 'rgba(40, 0, 0, 0.55)';
-  ctx.fillRect(0, ARENA.y - 90, CANVAS_W, 110);
+  ctx.fillRect(0, washTop, CANVAS_W, washH);
 
-  ctx.font = 'bold 22px "Courier New", monospace';
+  ctx.font = RED_BOX_FONT;
   ctx.fillStyle = '#ff2828';
   ctx.textAlign = 'center';
-  // Mild shake.
   const sx = (Math.random() - 0.5) * 1.6;
   const sy = (Math.random() - 0.5) * 1.4;
-  ctx.fillText(text, CANVAS_W / 2 + sx, ARENA.y - 50 + sy);
+  const pageLines = text.split('\n');
+  const block = pageLines.length * RED_BOX_LINE_H;
+  // Vertically center the block within the wash, but anchor near
+  // the bottom so the indicator has room.
+  const anchorY = washTop + (washH - block) / 2 + RED_BOX_LINE_H - 4;
+  for (let i = 0; i < pageLines.length; i++) {
+    ctx.fillText(pageLines[i],
+                 CANVAS_W / 2 + sx,
+                 anchorY + i * RED_BOX_LINE_H + sy);
+  }
 
-  // Continue indicator once fully revealed (only when player can advance).
+  // Continue indicator once page fully revealed.
   if (text.length === fullText.length) {
     ctx.font = '16px "Courier New", monospace';
     ctx.fillStyle = '#ff5050';
     const t = performance.now() / 250;
-    const ind = (Math.sin(t) > 0) ? '▼' : ' ';
+    const blink = Math.sin(t) > 0;
+    const ind = blink ? (isLastPage ? '▼' : '▶') : ' ';
     ctx.textAlign = 'right';
-    ctx.fillText(ind, CANVAS_W - 30, ARENA.y - 18);
+    ctx.fillText(ind, CANVAS_W - 30, washTop + washH - 8);
   }
   ctx.restore();
 }
