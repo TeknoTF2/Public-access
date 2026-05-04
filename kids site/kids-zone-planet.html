@@ -1974,11 +1974,15 @@ Object.assign(ATTACKS, {
 
   // Center sprinkler + occasional edge punctuation. The sprinkler
   // is the real challenge here; the edge bullets are sparse and
-  // single-side to keep the orbit puzzle readable.
+  // single-side to keep the orbit puzzle readable. A short
+  // telegraph fires before the sprinkler turns on so the player
+  // isn't standing on top of the spawn point when it does.
   PRESSURE_VALVE: {
     name: 'PRESSURE VALVE',
-    duration: 7.5,
+    duration: 8.3,
     init() {
+      bossAI.state.phase = 'telegraph';
+      bossAI.state.t = 0;
       bossAI.state.angle = 0;
       bossAI.state.spawnT = 0;
       bossAI.state.edgeT = 0;
@@ -1988,6 +1992,11 @@ Object.assign(ATTACKS, {
     update(dt) {
       const s = bossAI.state;
       bossSweep(dt, 0.4);
+      s.t += dt;
+      if (s.phase === 'telegraph') {
+        if (s.t >= 0.8) { s.phase = 'active'; s.t = 0; }
+        return;
+      }
       s.angle += dt * 2.6;
       s.spawnT += dt;
       s.edgeT += dt;
@@ -2018,6 +2027,22 @@ Object.assign(ATTACKS, {
                       ARENA.y + Math.random() * ARENA.h, -sp, 0);
         }
       }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s || s.phase !== 'telegraph') return;
+      ctx.save();
+      const pulse = 0.35 + 0.45 * Math.sin(s.t * 22);
+      ctx.fillStyle = 'rgba(255, 80, 80, ' + (pulse * 0.45).toFixed(2) + ')';
+      ctx.beginPath();
+      ctx.arc(s.cx, s.cy, 18, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255, 140, 140, ' + pulse.toFixed(2) + ')';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(s.cx, s.cy, 18, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
     },
   },
 
@@ -2312,31 +2337,66 @@ Object.assign(ATTACKS, {
     },
   },
 
-  // Bands rising from the floor with a single gap each.
+  // Bands rising from the floor with a single gap each. Each band
+  // is pre-rolled and telegraphed for ~0.6s on the floor before its
+  // bullets actually spawn — without this the bullets spawn at the
+  // player's feet (floor level) and one-shot a grounded player.
   RISING_SMOG: {
     name: 'RISING SMOG',
-    duration: 9.0,
+    duration: 11.0,
     init() {
-      bossAI.state.bands = [];
       bossAI.state.bandIndex = 0;
       bossAI.state.spawnT = 1.6;
+      bossAI.state.pending = null;       // {gapX, gapW, speed, t}
     },
     update(dt) {
       const s = bossAI.state;
       bossSweep(dt, 0.3);
+
+      if (s.pending) {
+        s.pending.t += dt;
+        if (s.pending.t >= 0.6) {
+          const { gapX, gapW, speed } = s.pending;
+          for (let x = ARENA.x + 6; x < ARENA.x + ARENA.w - 6; x += 14) {
+            if (x > gapX - gapW / 2 && x < gapX + gapW / 2) continue;
+            spawnBullet(x, ARENA.y + ARENA.h - 6, 0, speed);
+          }
+          s.bandIndex++;
+          s.pending = null;
+          s.spawnT = 0;
+        }
+        return;
+      }
+
+      if (s.bandIndex >= 5) return;
       s.spawnT += dt;
-      const interval = 1.6 - s.bandIndex * 0.1;
-      if (s.bandIndex < 5 && s.spawnT >= interval) {
-        s.spawnT = 0;
-        const speed = -(60 + s.bandIndex * 18) * P2_SPEED;
+      const interval = 1.4 - s.bandIndex * 0.1;
+      if (s.spawnT >= interval) {
         const gapX = ARENA.x + 28 + Math.random() * (ARENA.w - 56);
         const gapW = 50;
-        for (let x = ARENA.x + 6; x < ARENA.x + ARENA.w - 6; x += 14) {
-          if (x > gapX - gapW / 2 && x < gapX + gapW / 2) continue;
-          spawnBullet(x, ARENA.y + ARENA.h - 6, 0, speed);
-        }
-        s.bandIndex++;
+        const speed = -(60 + s.bandIndex * 18) * P2_SPEED;
+        s.pending = { gapX, gapW, speed, t: 0 };
       }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s || !s.pending) return;
+      ctx.save();
+      const pb = s.pending;
+      const pulse = 0.4 + 0.4 * Math.sin(pb.t * 22);
+      // Floor warning strip — solid where bullets will spawn, gap
+      // outlined where the safe pocket is.
+      ctx.fillStyle = 'rgba(120, 200, 255, ' + (pulse * 0.6).toFixed(2) + ')';
+      for (let x = ARENA.x + 6; x < ARENA.x + ARENA.w - 6; x += 14) {
+        if (x > pb.gapX - pb.gapW / 2 && x < pb.gapX + pb.gapW / 2) continue;
+        ctx.fillRect(x - 4, ARENA.y + ARENA.h - 8, 8, 6);
+      }
+      ctx.strokeStyle = 'rgba(140, 255, 160, ' + pulse.toFixed(2) + ')';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(pb.gapX - pb.gapW / 2 + 0.5,
+                     ARENA.y + ARENA.h - 14 + 0.5,
+                     pb.gapW, 12);
+      ctx.restore();
     },
   },
 
