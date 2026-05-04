@@ -531,9 +531,10 @@ other on session 4. Pick a ruling per table; record it.
   - **Chat** — links to `kids site/kids-zone-knowitall.html` and
     `kids site/kids-zone-claire.html` (live LLM-backed chatbots —
     see Chatbot Setup below).
-  - **Games** — links to `kids-zone-planet.html` (Captain Planet
-    Saves the Day) and `kids-zone-basement.html` (Escape Basement
-    World) (game stubs — to be implemented).
+  - **Games** — links to `kids site/kids-zone-planet.html` (Captain
+    Planet Saves the Day, stub — to be implemented) and
+    `kids site/kids-zone-basement.html` (Escape Basement World,
+    **playable** — see below).
   Slug `kids-zone` is added to the gateway bookmarks bar on first
   visit, but the page is **not** in the search index — the only
   intended path to it is via the terminal's Local Server icon.
@@ -612,6 +613,56 @@ The chat UI implements two pieces of behavior the prompt requires:
 Both pages share `kids site/TV Odyssey Games.mp3`, played on loop at
 ~30–35% volume after the player clicks the splash-screen Begin
 button (autoplay requires user gesture in modern browsers).
+
+### Escape Basement World (`kids site/kids-zone-basement.html`)
+
+Raycasting first-person walking simulator built on a `<canvas>`.
+Pure client-side — no server calls — so it works without
+`ANTHROPIC_API_KEY`.
+
+**Controls:** ↑/↓ walk forward/back one tile, ←/→ turn 90°. Held
+keys repeat (one step per ~220 ms move animation). All four arrow
+keys are captured by the page; nothing else.
+
+**World structure (per-tile, deterministic, lazy):**
+- `(even, even)` tiles → corridor floor (always)
+- `(odd, odd)`   tiles → corner pillar (always wall)
+- mixed parity   tiles → passage candidate, rolled with a per-tile
+  seeded RNG: 60% open, 35% wall, 5% brown door. Once generated,
+  a tile is cached forever — backtracking shows the same maze.
+
+Result is a regular grid of yellow corridors with random
+walls/passages between them, easy to walk around in.
+
+**Hallways.** Walking forward into a brown door pauses the music
+(saving its position), switches the renderer to a 1-wide dark
+corridor of `15–30` tiles with heavy fog (~2.6-tile draw distance)
+and a vignette. After the player walks the corridor's length, they
+exit into a randomly-chosen new corridor cell 4–8 cells away from
+where they entered (in a random cardinal direction). The music
+resumes from where it paused. This is the procedural-extension
+mechanic — every hallway drops the player into a fresh patch of
+maze they likely haven't generated yet.
+
+**The 10-minute timer.** Hidden from the player — no on-screen
+clock. Tracked by `state.gameStart = Date.now()`. Once
+`Date.now() - gameStart >= 10*60*1000`, the tile generator's wall
+roll has a 25% sub-chance to come up `TILE_DOOR_GREEN` (the exit)
+instead. **Tiles already cached pre-timer keep their original
+values** — the green door is only added to *newly* generated walls.
+Green doors render bright green; walking into one wins.
+
+**Win.** A "YOU MADE IT OUT" panel replaces the canvas with a
+back-to-Kids-Zone link. Music stops.
+
+**Music.** Loops `kids site/liminal mallcore loop small.mp3`
+(~10 MB) at 45% volume. Same autoplay-requires-gesture rule applies
+— starts on splash button click.
+
+**Tile distribution sanity (50×50 sample, mixed-parity tiles only):**
+- Pre-10-min: ~63% floor, ~32% wall, ~5% brown door, 0% green
+- Post-10-min: ~63% floor, ~24% wall, ~5% brown door, ~8% green
+  (≈25% of newly-generated walls)
 - **Hidden WDLK-TV staff page**: visit `wdlk-tv.html#staff` or
   `wdlk-tv.html?page=staff`. Also reachable from the schedule's
   Friday-midnight `S/T-7` cell.
