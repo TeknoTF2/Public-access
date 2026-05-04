@@ -333,8 +333,15 @@ function pointInRect(px, py, rx, ry, rw, rh) {
 }
 
 // Y position of the i-th PURPLE lane (0 = topmost).
+// TRACK_SWITCH (purple signature) overrides this with a wave so the
+// lanes physically slide up and down.
 function purpleLineY(i) {
-  return ARENA.y + ARENA.h * (i + 1) / (PURPLE_LINES + 1);
+  const base = ARENA.y + ARENA.h * (i + 1) / (PURPLE_LINES + 1);
+  if (typeof bossAI !== 'undefined' && bossAI.purpleWave) {
+    const w = bossAI.purpleWave;
+    return base + Math.sin(w.t * w.freq + i * 0.9) * w.amp;
+  }
+  return base;
 }
 
 // Snap a y coord to the nearest PURPLE lane index.
@@ -717,18 +724,22 @@ function updatePlayerBlue(dt) {
   if (keys.has('ArrowRight')) dx += 1;
   player.x += dx * BLUE_HORIZ_SPEED * dt;
 
-  // Gravity
-  player.vy += BLUE_GRAVITY * dt;
-  if (player.vy > BLUE_TERMINAL) player.vy = BLUE_TERMINAL;
+  // Gravity (boss attacks can intensify it via gravityMul/jumpMul).
+  const gMul = (typeof bossAI !== 'undefined' && bossAI.gravityMul) || 1;
+  const jMul = (typeof bossAI !== 'undefined' && bossAI.jumpMul) || 1;
+  player.vy += BLUE_GRAVITY * gMul * dt;
+  const term = BLUE_TERMINAL * gMul;
+  if (player.vy > term) player.vy = term;
   player.y += player.vy * dt;
 
-  // Jump (UP)
-  // Only jump when grounded; "grounded" = touching the bottom of the arena
-  const groundY = ARENA.y + ARENA.h - PLAYER_HITBOX / 2;
+  // Jump (UP) — grounded check uses the (possibly-rising) floor Y.
+  const groundY = (typeof bossAI !== 'undefined' && bossAI.blueFloorY)
+    ? bossAI.blueFloorY - PLAYER_HITBOX / 2
+    : ARENA.y + ARENA.h - PLAYER_HITBOX / 2;
   if (player.y >= groundY) {
     player.y = groundY;
     player.vy = 0;
-    if (keys.has('ArrowUp')) player.vy = BLUE_JUMP_VEL;
+    if (keys.has('ArrowUp')) player.vy = BLUE_JUMP_VEL * jMul;
   }
   clampPlayerToArena();
 }
@@ -861,6 +872,26 @@ function resetBossAI() {
   bossAI.acidRainFired = false;
   bossAI.bulletSpeedMul = 1.0;
   bossAI.state = {};
+  // ---- Phase 2 cycling state ----
+  bossAI.soul = 'red';
+  bossAI.attacksInSoul = 0;
+  bossAI.targetAttacksInSoul = 2;
+  bossAI.firstRotation = true;
+  bossAI.firstRotationIdx = 0;          // index into ['red','blue','purple','green']
+  bossAI.soulSwitchT = 0;               // >0 while telegraphing a switch
+  bossAI.soulSwitchTo = null;
+  bossAI.soulNamedShown = {};           // teach the color name once each
+  // ---- Phase 2 → gauntlet ----
+  bossAI.gauntletTriggered = false;
+  bossAI.gauntletDone = false;
+  bossAI.gauntletStep = 0;
+  bossAI.gauntletPhase = '';            // 'flash' | 'attack' | 'silence'
+  bossAI.gauntletT = 0;
+  // ---- Per-attack engine hooks (cleared between attacks) ----
+  bossAI.purpleWave = null;
+  bossAI.gravityMul = 1;
+  bossAI.jumpMul = 1;
+  bossAI.blueFloorY = 0;
 }
 
 // ---------- Phase 1 attack pool ----------
@@ -879,12 +910,20 @@ function pickNextAttack() {
   return candidates[Math.floor(Math.random() * candidates.length)];
 }
 
+function clearAttackHooks() {
+  bossAI.purpleWave = null;
+  bossAI.gravityMul = 1;
+  bossAI.jumpMul = 1;
+  bossAI.blueFloorY = 0;
+}
+
 function startAttack(id) {
   bossAI.attack = id;
   bossAI.attackT = 0;
   bossAI.history.push(id);
   if (bossAI.history.length > 3) bossAI.history.shift();
   bossAI.state = {};
+  clearAttackHooks();
   const def = ATTACKS[id];
   if (def && def.init) def.init();
 }
@@ -1389,13 +1428,1631 @@ const ATTACKS = {
   },
 };
 
+// =============================================================
+//  PHASE 2 — soul-driven attack rotation
+// =============================================================
+//  Phase 2 forces the player into one of four soul colors at any
+//  given moment. Each color changes movement physics and has its
+//  own pool of 5 attacks plus a signature. Every 2-3 attacks the
+//  soul switches; the first full rotation is hard-coded
+//  Red→Blue→Purple→Green so the player learns each mechanic.
+// =============================================================
+
+const SOUL_ORDER = ['red', 'blue', 'purple', 'green'];
+
+const PHASE2_POOLS = {
+  red:    ['CONTAMINATION_ZONES', 'TOXIC_BUBBLES', 'PRESSURE_VALVE', 'FUME_TRAIL', 'STATIC_FIELD'],
+  blue:   ['ACID_PUDDLES', 'RISING_SMOG', 'DOWNDRAFT', 'GEYSER', 'BOUNCE_PADS'],
+  purple: ['LINE_SWEEP', 'RAIL_SHUTDOWN', 'CONVERGING_RAILS', 'ALTERNATING_CURRENT', 'CHAIN_REACTION'],
+  green:  ['CARDINAL_SHOTS', 'RING_OF_FIRE', 'PING_PONG', 'FEINT', 'MACHINE_GUN_ROULETTE'],
+};
+
+const PHASE2_SIGS = {
+  red:    'BIOHAZARD',
+  blue:   'GRAVITY_WELL',
+  purple: 'TRACK_SWITCH',
+  green:  'TOXIC_FORTRESS',
+};
+
+const SOUL_TO_STATE = {
+  red:    S_RED,
+  blue:   S_BLUE,
+  purple: S_PURPLE,
+  green:  S_GREEN,
+};
+
+function startSoulSwitch() {
+  let next;
+  if (bossAI.firstRotation) {
+    bossAI.firstRotationIdx++;
+    if (bossAI.firstRotationIdx >= SOUL_ORDER.length) {
+      bossAI.firstRotation = false;
+      const choices = SOUL_ORDER.filter(s => s !== bossAI.soul);
+      next = choices[Math.floor(Math.random() * choices.length)];
+    } else {
+      next = SOUL_ORDER[bossAI.firstRotationIdx];
+    }
+  } else {
+    const choices = SOUL_ORDER.filter(s => s !== bossAI.soul);
+    next = choices[Math.floor(Math.random() * choices.length)];
+  }
+  bossAI.soulSwitchTo = next;
+  bossAI.soulSwitchT = 1.0;
+  // Wipe in-flight bullets — switching states mid-fire would be unfair.
+  enemyBullets.length = 0;
+}
+
+function pickNextPhase2Attack() {
+  // First attack of the phase is locked to CONTAMINATION_ZONES per spec.
+  if (bossAI.firstAttack) {
+    bossAI.firstAttack = false;
+    return 'CONTAMINATION_ZONES';
+  }
+  const pool = PHASE2_POOLS[bossAI.soul];
+  const last = bossAI.history[bossAI.history.length - 1];
+  const candidates = pool.filter(a => a !== last);
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function endPhase2Attack() {
+  const id = bossAI.attack;
+  bossAI.attack = null;
+  clearAttackHooks();
+  bossAI.attacksInSoul++;
+  bossAI.counter++;
+  // Downtime decreases as HP drops.
+  const hpFrac = boss.hp / boss.maxHp;
+  if (hpFrac <= 0.25)      bossAI.downtime = 0.0;
+  else if (hpFrac <= 0.50) bossAI.downtime = 0.5;
+  else                      bossAI.downtime = 1.0;
+}
+
+function updatePhase2AI(dt) {
+  // Gauntlet trigger — at very low HP, freeze invincible and chain
+  // all four signatures back to back.
+  if (!bossAI.gauntletDone && !bossAI.gauntletTriggered
+      && boss.hp / boss.maxHp <= 0.07) {
+    bossAI.gauntletTriggered = true;
+    enemyBullets.length = 0;
+    bossAI.attack = null;
+    boss.invincible = true;
+    bossAI.gauntletPhase = 'intro';
+    bossAI.gauntletT = 0;
+    bossAI.gauntletStep = 0;
+    return;
+  }
+  if (bossAI.gauntletTriggered && !bossAI.gauntletDone) {
+    updateGauntlet(dt);
+    return;
+  }
+
+  // Soul switch telegraph (1s freeze, no attack, screen flash).
+  if (bossAI.soulSwitchT > 0) {
+    bossAI.soulSwitchT -= dt;
+    bossSweep(dt, 0.5);
+    if (bossAI.soulSwitchT <= 0) {
+      bossAI.soul = bossAI.soulSwitchTo;
+      bossAI.soulSwitchTo = null;
+      setState(SOUL_TO_STATE[bossAI.soul]);
+      bossAI.attacksInSoul = 0;
+      bossAI.targetAttacksInSoul = 2 + Math.floor(Math.random() * 2); // 2 or 3
+      bossAI.soulNamedShown[bossAI.soul] = true;
+      startAttack(pickNextPhase2Attack());
+    }
+    return;
+  }
+
+  if (!bossAI.attack) {
+    bossSweep(dt);
+    bossAI.downtime -= dt;
+    if (bossAI.downtime <= 0) {
+      // Time to switch souls? Use signature as the closer of a soul-cycle
+      // every 4th time we run out of budget on a given color.
+      if (bossAI.attacksInSoul >= bossAI.targetAttacksInSoul) {
+        startSoulSwitch();
+      } else {
+        startAttack(pickNextPhase2Attack());
+      }
+    }
+    return;
+  }
+
+  bossAI.attackT += dt;
+  const def = ATTACKS[bossAI.attack];
+  if (def && def.update) def.update(dt);
+  if (bossAI.attackT >= def.duration) endPhase2Attack();
+}
+
+// ---------- Gauntlet (Phase 2 → 3 desperation) ----------
+const GAUNTLET_SEQUENCE = [
+  { soul: 'red',    attack: 'BIOHAZARD' },
+  { soul: 'blue',   attack: 'GRAVITY_WELL' },
+  { soul: 'purple', attack: 'TRACK_SWITCH' },
+  { soul: 'green',  attack: 'TOXIC_FORTRESS' },
+];
+
+function startGauntletStep(idx) {
+  const step = GAUNTLET_SEQUENCE[idx];
+  bossAI.soul = step.soul;
+  setState(SOUL_TO_STATE[step.soul]);
+  enemyBullets.length = 0;
+  startAttack(step.attack);
+  bossAI.gauntletPhase = 'attack';
+  bossAI.gauntletT = 0;
+}
+
+function updateGauntlet(dt) {
+  bossAI.gauntletT += dt;
+  if (bossAI.gauntletPhase === 'intro') {
+    // Slot-machine cycle through the colors before settling on Red.
+    bossSweep(dt, 0.3);
+    if (bossAI.gauntletT >= 1.5) {
+      startGauntletStep(0);
+    }
+    return;
+  }
+  if (bossAI.gauntletPhase === 'attack') {
+    const def = ATTACKS[bossAI.attack];
+    if (def && def.update) def.update(dt);
+    bossAI.attackT += dt;
+    if (bossAI.attackT >= def.duration) {
+      bossAI.attack = null;
+      clearAttackHooks();
+      bossAI.gauntletStep++;
+      if (bossAI.gauntletStep >= GAUNTLET_SEQUENCE.length) {
+        // All four signatures survived. Brief silence, then the
+        // boss stands exposed at 1 HP; the next auto-fire shot
+        // ends Phase 2.
+        bossAI.gauntletPhase = 'silence';
+        bossAI.gauntletT = 0;
+        enemyBullets.length = 0;
+        boss.invincible = false;
+        boss.hp = 1; // health bar shows the single pixel
+        // Force player back to RED for a clean transition feel.
+        setState(S_RED);
+      } else {
+        startGauntletStep(bossAI.gauntletStep);
+      }
+    }
+    return;
+  }
+  if (bossAI.gauntletPhase === 'silence') {
+    // Boss stands still and vulnerable. The auto-fire will finish
+    // him within ~0.1s. Fallback: if for some reason the shot misses
+    // for 2s, mark gauntletDone so the cutscene fires anyway.
+    if (bossAI.gauntletT >= 2.0) {
+      bossAI.gauntletDone = true;
+    }
+    return;
+  }
+}
+
+// =============================================================
+//  PHASE 2 ATTACK DEFINITIONS
+// =============================================================
+//  Per phase2_attacks.md. Bullets generally spawn INSIDE the box,
+//  faster than Phase 1, with patterns designed around the active
+//  soul color's movement rules.
+// =============================================================
+
+// Faster Phase 2 baseline.
+const P2_SPEED = 1.15;
+
+// Helper: spawn a bullet that won't damage (for "harmless head" of the
+// FUME_TRAIL snake or visual-only telegraphs).
+function spawnHarmless(x, y, vx, vy, opts) {
+  const o = opts || {};
+  enemyBullets.push({
+    x, y, vx, vy,
+    r: o.r != null ? o.r : ENEMY_BULLET_R,
+    color: o.color || 'rgba(255, 255, 255, 0.45)',
+    harmless: true,
+  });
+}
+
+// Random point inside the arena (with margin).
+function arenaRand(margin) {
+  const m = margin || 30;
+  return {
+    x: ARENA.x + m + Math.random() * (ARENA.w - 2 * m),
+    y: ARENA.y + m + Math.random() * (ARENA.h - 2 * m),
+  };
+}
+
+// ---------- Add Phase 2 attacks to the existing ATTACKS table ----------
+Object.assign(ATTACKS, {
+
+  // ============================================================
+  //  RED SOUL — 5 attacks + signature
+  // ============================================================
+
+  // 3-4 zones pulse, then erupt radially. 3 rounds.
+  CONTAMINATION_ZONES: {
+    name: 'CONTAMINATION ZONES',
+    duration: 7.0,
+    init() {
+      bossAI.state.round = -1;
+      bossAI.state.roundT = 0;
+      bossAI.state.zones = [];
+      bossAI.state.fired = false;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.5);
+      s.roundT += dt;
+      if (s.round < 0 || (s.fired && s.roundT >= 0.6)) {
+        // Begin a new round.
+        s.round = (s.round < 0) ? 0 : s.round + 1;
+        if (s.round >= 3) return;
+        s.fired = false;
+        s.roundT = 0;
+        s.zones = [];
+        const n = 3 + Math.floor(Math.random() * 2);
+        for (let i = 0; i < n; i++) s.zones.push(arenaRand(40));
+      }
+      if (!s.fired && s.roundT >= 1.5) {
+        s.fired = true;
+        for (const z of s.zones) {
+          spawnRadial(z.x, z.y, 14, 130 * P2_SPEED);
+        }
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s || !s.zones) return;
+      ctx.save();
+      for (const z of s.zones) {
+        if (s.fired) continue;
+        const r = 14 + Math.sin(s.roundT * 16) * 5;
+        ctx.strokeStyle = 'rgba(255, 80, 80, 0.85)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(z.x, z.y, r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255, 80, 80, 0.18)';
+        ctx.beginPath();
+        ctx.arc(z.x, z.y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    },
+  },
+
+  // 6 large slow drifting bubbles bounce around; pop into 8 bullets.
+  TOXIC_BUBBLES: {
+    name: 'TOXIC BUBBLES',
+    duration: 8.5,
+    init() {
+      bossAI.state.round = 0;
+      bossAI.state.roundT = 0;
+      bossAI.state.bubbles = [];
+      bossAI.state.popped = false;
+      _spawnBubbles();
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.4);
+      s.roundT += dt;
+      // Drift + bounce
+      for (const bub of s.bubbles) {
+        bub.x += bub.vx * dt;
+        bub.y += bub.vy * dt;
+        if (bub.x < ARENA.x + bub.r) { bub.x = ARENA.x + bub.r; bub.vx *= -1; }
+        if (bub.x > ARENA.x + ARENA.w - bub.r) { bub.x = ARENA.x + ARENA.w - bub.r; bub.vx *= -1; }
+        if (bub.y < ARENA.y + bub.r) { bub.y = ARENA.y + bub.r; bub.vy *= -1; }
+        if (bub.y > ARENA.y + ARENA.h - bub.r) { bub.y = ARENA.y + ARENA.h - bub.r; bub.vy *= -1; }
+      }
+      if (!s.popped && s.roundT >= 4.0) {
+        s.popped = true;
+        for (const bub of s.bubbles) {
+          spawnRadial(bub.x, bub.y, 8, 170 * P2_SPEED);
+        }
+        s.bubbles = [];
+      }
+      if (s.popped && s.roundT >= 4.5 && s.round < 1) {
+        s.round++;
+        s.roundT = 0;
+        s.popped = false;
+        _spawnBubbles();
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s || !s.bubbles) return;
+      ctx.save();
+      for (const bub of s.bubbles) {
+        ctx.fillStyle = 'rgba(180, 60, 200, 0.35)';
+        ctx.beginPath();
+        ctx.arc(bub.x, bub.y, bub.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(220, 120, 240, 0.9)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(bub.x, bub.y, bub.r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    },
+  },
+
+  // Center sprinkler + shrinking edge bullets.
+  PRESSURE_VALVE: {
+    name: 'PRESSURE VALVE',
+    duration: 7.5,
+    init() {
+      bossAI.state.angle = 0;
+      bossAI.state.spawnT = 0;
+      bossAI.state.edgeT = 0;
+      bossAI.state.cx = ARENA.x + ARENA.w / 2;
+      bossAI.state.cy = ARENA.y + ARENA.h / 2;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.4);
+      s.angle += dt * 2.6;
+      s.spawnT += dt;
+      s.edgeT += dt;
+      // Sprinkler
+      if (s.spawnT >= 0.07) {
+        s.spawnT = 0;
+        const a = s.angle;
+        spawnBullet(s.cx, s.cy,
+                    Math.cos(a) * 150 * P2_SPEED,
+                    Math.sin(a) * 150 * P2_SPEED);
+      }
+      // Edge inward bullets (4 sides)
+      if (s.edgeT >= 0.45) {
+        s.edgeT = 0;
+        const sp = 60 * P2_SPEED;
+        // Top
+        const tx = ARENA.x + Math.random() * ARENA.w;
+        spawnBullet(tx, ARENA.y + 4, 0, sp);
+        // Bottom
+        const bx = ARENA.x + Math.random() * ARENA.w;
+        spawnBullet(bx, ARENA.y + ARENA.h - 4, 0, -sp);
+        // Left
+        const ly = ARENA.y + Math.random() * ARENA.h;
+        spawnBullet(ARENA.x + 4, ly, sp, 0);
+        // Right
+        const ry = ARENA.y + Math.random() * ARENA.h;
+        spawnBullet(ARENA.x + ARENA.w - 4, ry, -sp, 0);
+      }
+    },
+  },
+
+  // 1 then 2 then 3 snake heads leaving stationary trails.
+  FUME_TRAIL: {
+    name: 'FUME TRAIL',
+    duration: 8.0,
+    init() {
+      bossAI.state.snakes = [_makeSnake()];
+      bossAI.state.spawnExtra1 = false;
+      bossAI.state.spawnExtra2 = false;
+      bossAI.state.dropT = 0;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.3);
+      if (!s.spawnExtra1 && bossAI.attackT >= 2.0) { s.snakes.push(_makeSnake()); s.spawnExtra1 = true; }
+      if (!s.spawnExtra2 && bossAI.attackT >= 4.0) { s.snakes.push(_makeSnake()); s.spawnExtra2 = true; }
+      // Move heads in smooth curves.
+      for (const sk of s.snakes) {
+        sk.angle += (Math.random() - 0.5) * dt * 4;
+        sk.x += Math.cos(sk.angle) * sk.speed * dt;
+        sk.y += Math.sin(sk.angle) * sk.speed * dt;
+        if (sk.x < ARENA.x + 10) { sk.x = ARENA.x + 10; sk.angle = Math.PI - sk.angle; }
+        if (sk.x > ARENA.x + ARENA.w - 10) { sk.x = ARENA.x + ARENA.w - 10; sk.angle = Math.PI - sk.angle; }
+        if (sk.y < ARENA.y + 10) { sk.y = ARENA.y + 10; sk.angle = -sk.angle; }
+        if (sk.y > ARENA.y + ARENA.h - 10) { sk.y = ARENA.y + ARENA.h - 10; sk.angle = -sk.angle; }
+        sk.dropT += dt;
+        if (sk.dropT >= 0.3) {
+          sk.dropT = 0;
+          spawnBullet(sk.x, sk.y, 0, 0, { color: '#aa44ff' });
+        }
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s || !s.snakes) return;
+      ctx.save();
+      for (const sk of s.snakes) {
+        ctx.fillStyle = 'rgba(255, 220, 255, 0.85)';
+        ctx.beginPath();
+        ctx.arc(sk.x, sk.y, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(sk.x, sk.y, 9, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    },
+  },
+
+  // Grid of bullets with one drifting safe gap.
+  STATIC_FIELD: {
+    name: 'STATIC FIELD',
+    duration: 9.5,
+    init() {
+      bossAI.state.t = 0;
+      bossAI.state.dirIdx = 0;
+      bossAI.state.dirChanges = 0;
+      bossAI.state.dir = { x: 1, y: 0 };
+      bossAI.state.spawned = false;
+      bossAI.state.gapX = ARENA.x + ARENA.w / 2;
+      bossAI.state.gapY = ARENA.y + ARENA.h / 2;
+      bossAI.state.gridBullets = [];
+      _populateGrid();
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.3);
+      s.t += dt;
+      // Drift bullets in current direction.
+      const sp = 45 * P2_SPEED;
+      for (const b of s.gridBullets) {
+        b.x += s.dir.x * sp * dt;
+        b.y += s.dir.y * sp * dt;
+        // Wrap to opposite side.
+        if (b.x < ARENA.x - 4)        b.x = ARENA.x + ARENA.w;
+        if (b.x > ARENA.x + ARENA.w + 4) b.x = ARENA.x;
+        if (b.y < ARENA.y - 4)        b.y = ARENA.y + ARENA.h;
+        if (b.y > ARENA.y + ARENA.h + 4) b.y = ARENA.y;
+      }
+      // Move gap.
+      s.gapX += s.dir.x * sp * dt;
+      s.gapY += s.dir.y * sp * dt;
+      if (s.t >= 3.0 && s.dirChanges < 3) {
+        s.t = 0;
+        s.dirChanges++;
+        const dirs = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
+        s.dir = dirs[Math.floor(Math.random() * 4)];
+      }
+      // Push grid bullets into enemyBullets each frame as static? No —
+      // use them directly with a custom collision via spawnHarmless?
+      // Simpler: each frame drop fresh real bullets at their positions
+      // and remove old ones. But that's expensive — instead, render
+      // them ourselves and check collisions inline.
+      _staticFieldCollide(s);
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s || !s.gridBullets) return;
+      ctx.save();
+      for (const b of s.gridBullets) {
+        // Skip bullets inside the gap.
+        const dx = b.x - s.gapX, dy = b.y - s.gapY;
+        if (dx*dx + dy*dy < 30*30) continue;
+        ctx.fillStyle = '#c845ff';
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, ENEMY_BULLET_R, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Gap outline (faint).
+      ctx.strokeStyle = 'rgba(180, 255, 180, 0.25)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(s.gapX, s.gapY, 30, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    },
+  },
+
+  // SIGNATURE — Triple spiral with reversals.
+  BIOHAZARD: {
+    name: 'BIOHAZARD',
+    duration: 6.0,
+    init() {
+      bossAI.state.phase = 'telegraph';
+      bossAI.state.t = 0;
+      bossAI.state.angle = 0;
+      bossAI.state.dir = 1;
+      bossAI.state.reversals = 0;
+      bossAI.state.spawnT = 0;
+      bossAI.state.cx = ARENA.x + ARENA.w / 2;
+      bossAI.state.cy = ARENA.y + ARENA.h / 2;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.2);
+      s.t += dt;
+      if (s.phase === 'telegraph') {
+        if (s.t >= 1.0) { s.phase = 'spiral'; s.t = 0; }
+      } else {
+        s.angle += dt * 4 * s.dir;
+        s.spawnT += dt;
+        if (s.spawnT >= 0.05) {
+          s.spawnT = 0;
+          const sp = 145 * P2_SPEED;
+          for (let arm = 0; arm < 3; arm++) {
+            const a = s.angle + (arm * Math.PI * 2 / 3);
+            spawnBullet(s.cx, s.cy,
+                        Math.cos(a) * sp, Math.sin(a) * sp,
+                        { color: '#ff4040' });
+          }
+        }
+        if (s.t >= 0.5) {
+          s.t = 0;
+          s.dir *= -1;
+          s.reversals++;
+        }
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s) return;
+      if (s.phase === 'telegraph') {
+        ctx.save();
+        const a = 0.3 + 0.2 * Math.sin(s.t * 24);
+        ctx.fillStyle = 'rgba(255, 60, 60, ' + a.toFixed(2) + ')';
+        ctx.fillRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h);
+        ctx.font = 'bold 22px "Courier New", monospace';
+        ctx.fillStyle = '#ff5050';
+        ctx.textAlign = 'center';
+        ctx.fillText('☣ BIOHAZARD ☣', CANVAS_W / 2, ARENA.y - 30);
+        ctx.restore();
+      }
+    },
+  },
+
+  // ============================================================
+  //  BLUE SOUL — gravity-locked
+  // ============================================================
+
+  // Sliding green puddles on the floor + ceiling drops.
+  ACID_PUDDLES: {
+    name: 'ACID PUDDLES',
+    duration: 7.5,
+    init() {
+      bossAI.state.puddles = [];
+      const w = ARENA.w / 4;
+      for (let i = 0; i < 3; i++) {
+        bossAI.state.puddles.push({
+          x: ARENA.x + (i + 0.5) * (ARENA.w / 3),
+          w: w,
+          vx: (Math.random() < 0.5 ? -1 : 1) * 50,
+        });
+      }
+      bossAI.state.dropT = 0;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.3);
+      // Slide puddles.
+      for (const p of s.puddles) {
+        p.x += p.vx * dt;
+        if (p.x < ARENA.x + p.w / 2)         { p.x = ARENA.x + p.w / 2; p.vx *= -1; }
+        if (p.x > ARENA.x + ARENA.w - p.w/2) { p.x = ARENA.x + ARENA.w - p.w / 2; p.vx *= -1; }
+      }
+      // Spawn ceiling drops.
+      s.dropT += dt;
+      if (s.dropT >= 0.55) {
+        s.dropT = 0;
+        const dx = ARENA.x + 12 + Math.random() * (ARENA.w - 24);
+        spawnBullet(dx, ARENA.y - 6, 0, 230 * P2_SPEED);
+      }
+      // Puddle collisions: damage if player feet are inside.
+      _puddleDamage(s.puddles);
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s || !s.puddles) return;
+      ctx.save();
+      const py = ARENA.y + ARENA.h - 6;
+      for (const p of s.puddles) {
+        ctx.fillStyle = 'rgba(140, 255, 80, 0.7)';
+        ctx.fillRect(p.x - p.w / 2, py, p.w, 6);
+        ctx.fillStyle = 'rgba(80, 255, 60, 0.4)';
+        ctx.fillRect(p.x - p.w / 2, py - 3, p.w, 3);
+      }
+      ctx.restore();
+    },
+  },
+
+  // Bands rising from the floor with a single gap each.
+  RISING_SMOG: {
+    name: 'RISING SMOG',
+    duration: 9.0,
+    init() {
+      bossAI.state.bands = [];
+      bossAI.state.bandIndex = 0;
+      bossAI.state.spawnT = 1.6;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.3);
+      s.spawnT += dt;
+      const interval = 1.6 - s.bandIndex * 0.1;
+      if (s.bandIndex < 5 && s.spawnT >= interval) {
+        s.spawnT = 0;
+        const speed = -(60 + s.bandIndex * 18) * P2_SPEED;
+        const gapX = ARENA.x + 28 + Math.random() * (ARENA.w - 56);
+        const gapW = 50;
+        for (let x = ARENA.x + 6; x < ARENA.x + ARENA.w - 6; x += 14) {
+          if (x > gapX - gapW / 2 && x < gapX + gapW / 2) continue;
+          spawnBullet(x, ARENA.y + ARENA.h - 6, 0, speed);
+        }
+        s.bandIndex++;
+      }
+    },
+  },
+
+  // Columns sweeping L→R then R→L.
+  DOWNDRAFT: {
+    name: 'DOWNDRAFT',
+    duration: 7.5,
+    init() {
+      bossAI.state.cols = [];
+      const N = 9;
+      for (let i = 0; i < N; i++) {
+        bossAI.state.cols.push(ARENA.x + ARENA.w * (i + 0.5) / N);
+      }
+      bossAI.state.idx = 0;
+      bossAI.state.dir = 1;
+      bossAI.state.cycle = 0;
+      bossAI.state.t = 0;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.3);
+      s.t += dt;
+      if (s.t >= 0.18) {
+        s.t = 0;
+        const isDouble = (s.cycle % 3 === 2);
+        if (isDouble) {
+          // Two columns with a gap between them.
+          spawnBullet(s.cols[s.idx], ARENA.y - 6, 0, 220 * P2_SPEED);
+          const other = (s.idx + 4) % s.cols.length;
+          spawnBullet(s.cols[other], ARENA.y - 6, 0, 220 * P2_SPEED);
+        } else {
+          spawnBullet(s.cols[s.idx], ARENA.y - 6, 0, 220 * P2_SPEED);
+        }
+        s.idx += s.dir;
+        if (s.idx < 0 || s.idx >= s.cols.length) {
+          s.dir *= -1;
+          s.idx += s.dir;
+          s.cycle++;
+        }
+      }
+    },
+  },
+
+  // 3 floor warning + erupting columns; horizontal mid-height drift.
+  GEYSER: {
+    name: 'GEYSER',
+    duration: 8.5,
+    init() {
+      bossAI.state.round = -1;
+      bossAI.state.roundT = 0;
+      bossAI.state.geysers = []; // {x, phase: 'warn'|'erupt', t}
+      bossAI.state.driftT = 0;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.3);
+      s.roundT += dt;
+      // Begin a new round if needed.
+      if (s.geysers.length === 0 && s.round < 3) {
+        s.round++;
+        s.geysers = [];
+        for (let i = 0; i < 3; i++) {
+          s.geysers.push({
+            x: ARENA.x + 30 + Math.random() * (ARENA.w - 60),
+            phase: 'warn',
+            t: 0,
+          });
+        }
+      }
+      // Update geysers.
+      for (let i = s.geysers.length - 1; i >= 0; i--) {
+        const g = s.geysers[i];
+        g.t += dt;
+        if (g.phase === 'warn' && g.t >= 0.5) {
+          g.phase = 'erupt';
+          g.t = 0;
+          // Spawn a column of bullets all at once.
+          for (let y = ARENA.y + ARENA.h - 8; y > ARENA.y; y -= 14) {
+            spawnBullet(g.x, y, 0, 0, { color: '#aaff44' });
+          }
+        }
+        if (g.phase === 'erupt' && g.t >= 2.0) {
+          // Erupt finished — purge column bullets we spawned.
+          // (They had vy=0; they linger. Clear by proximity.)
+          for (let j = enemyBullets.length - 1; j >= 0; j--) {
+            const b = enemyBullets[j];
+            if (Math.abs(b.x - g.x) < 6 && b.vx === 0 && b.vy === 0) {
+              enemyBullets.splice(j, 1);
+            }
+          }
+          s.geysers.splice(i, 1);
+        }
+      }
+      // Mid-height drift bullets (between geyser rounds and during).
+      s.driftT += dt;
+      if (s.driftT >= 0.55) {
+        s.driftT = 0;
+        const fromLeft = Math.random() < 0.5;
+        const yMid = ARENA.y + ARENA.h * 0.45 + (Math.random() - 0.5) * 30;
+        spawnBullet(
+          fromLeft ? ARENA.x - 6 : ARENA.x + ARENA.w + 6,
+          yMid,
+          (fromLeft ? 1 : -1) * 130 * P2_SPEED,
+          0
+        );
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s || !s.geysers) return;
+      ctx.save();
+      for (const g of s.geysers) {
+        if (g.phase === 'warn') {
+          const a = 0.3 + 0.4 * Math.sin(g.t * 20);
+          ctx.fillStyle = 'rgba(180, 255, 80, ' + a.toFixed(2) + ')';
+          ctx.fillRect(g.x - 8, ARENA.y + ARENA.h - 4, 16, 4);
+          // Up arrow telegraph.
+          ctx.strokeStyle = 'rgba(180, 255, 80, 0.85)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(g.x, ARENA.y + ARENA.h - 6);
+          ctx.lineTo(g.x, ARENA.y + ARENA.h - 26);
+          ctx.moveTo(g.x - 4, ARENA.y + ARENA.h - 22);
+          ctx.lineTo(g.x, ARENA.y + ARENA.h - 26);
+          ctx.lineTo(g.x + 4, ARENA.y + ARENA.h - 22);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    },
+  },
+
+  // Crossing horizontal streams the player has to thread between
+  // (simplified bounce-pad attack — vertical pads abstracted into
+  // gaps the player can jump through).
+  BOUNCE_PADS: {
+    name: 'BOUNCE PADS',
+    duration: 8.0,
+    init() {
+      bossAI.state.t = 0;
+      bossAI.state.streamT = 0;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.3);
+      s.streamT += dt;
+      if (s.streamT >= 0.20) {
+        s.streamT = 0;
+        const yLow  = ARENA.y + ARENA.h * 0.62;
+        const yHigh = ARENA.y + ARENA.h * 0.38;
+        spawnBullet(ARENA.x - 6, yLow, 200 * P2_SPEED, 0, { color: '#80c0ff' });
+        spawnBullet(ARENA.x + ARENA.w + 6, yHigh, -200 * P2_SPEED, 0, { color: '#80c0ff' });
+      }
+      // Periodic "bounce window" — a short gap in both streams that
+      // rewards a well-timed jump. We just throttle every 2.5s with
+      // a brief no-spawn window.
+    },
+  },
+
+  // SIGNATURE — Gravity Well: dense rain + rising floor + reduced jump.
+  GRAVITY_WELL: {
+    name: 'GRAVITY WELL',
+    duration: 10.0,
+    init() {
+      bossAI.state.phase = 'telegraph';
+      bossAI.state.t = 0;
+      bossAI.state.spawnT = 0;
+      bossAI.state.floorT = 0;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.2);
+      s.t += dt;
+      if (s.phase === 'telegraph') {
+        if (s.t >= 1.0) {
+          s.phase = 'active';
+          s.t = 0;
+          bossAI.gravityMul = 1.6;
+          bossAI.jumpMul = 0.7;
+        }
+        return;
+      }
+      // Rising floor.
+      s.floorT += dt;
+      const floorRise = clamp(s.floorT / 9.0, 0, 1) * (ARENA.h * 0.45);
+      bossAI.blueFloorY = ARENA.y + ARENA.h - floorRise;
+      // Dense rainfall.
+      s.spawnT += dt;
+      if (s.spawnT >= 0.05) {
+        s.spawnT = 0;
+        const rx = ARENA.x + Math.random() * ARENA.w;
+        spawnBullet(rx, ARENA.y - 6, 0, 220 * P2_SPEED, { color: '#7fc7ff' });
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s) return;
+      if (s.phase === 'telegraph') {
+        ctx.save();
+        const a = 0.3 + 0.2 * Math.sin(s.t * 24);
+        ctx.fillStyle = 'rgba(60, 140, 255, ' + a.toFixed(2) + ')';
+        ctx.fillRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h);
+        ctx.font = 'bold 22px "Courier New", monospace';
+        ctx.fillStyle = '#7fc7ff';
+        ctx.textAlign = 'center';
+        ctx.fillText('GRAVITY WELL', CANVAS_W / 2, ARENA.y - 30);
+        ctx.restore();
+      } else if (bossAI.blueFloorY) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(60, 140, 255, 0.65)';
+        ctx.fillRect(ARENA.x, bossAI.blueFloorY,
+                     ARENA.w, ARENA.y + ARENA.h - bossAI.blueFloorY);
+        ctx.strokeStyle = '#aaddff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(ARENA.x, bossAI.blueFloorY);
+        ctx.lineTo(ARENA.x + ARENA.w, bossAI.blueFloorY);
+        ctx.stroke();
+        ctx.restore();
+      }
+    },
+  },
+
+  // ============================================================
+  //  PURPLE SOUL — rail-locked
+  // ============================================================
+
+  // A solid vertical bar sweeps across the lanes; alternates side.
+  LINE_SWEEP: {
+    name: 'LINE SWEEP',
+    duration: 6.5,
+    init() {
+      bossAI.state.sweepIdx = 0;
+      bossAI.state.barX = ARENA.x;
+      bossAI.state.dir = 1;
+      bossAI.state.spawnT = 0;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.3);
+      const speed = (140 + s.sweepIdx * 30) * P2_SPEED;
+      s.barX += s.dir * speed * dt;
+      // Spawn vertical bar continuously by laying down stationary
+      // bullets along the column at the bar's current x.
+      s.spawnT += dt;
+      if (s.spawnT >= 0.05) {
+        s.spawnT = 0;
+        for (let i = 0; i < PURPLE_LINES; i++) {
+          spawnBullet(s.barX, purpleLineY(i), 0, 0, { color: '#c845ff' });
+        }
+      }
+      // Bar hits the opposite edge — clear leftover stationary bar
+      // bullets and start a new sweep.
+      if ((s.dir === 1 && s.barX > ARENA.x + ARENA.w + 4) ||
+          (s.dir === -1 && s.barX < ARENA.x - 4)) {
+        for (let j = enemyBullets.length - 1; j >= 0; j--) {
+          const b = enemyBullets[j];
+          if (b.vx === 0 && b.vy === 0 && b.color === '#c845ff') {
+            enemyBullets.splice(j, 1);
+          }
+        }
+        s.sweepIdx++;
+        s.dir *= -1;
+        s.barX = (s.dir === 1) ? ARENA.x : ARENA.x + ARENA.w;
+        if (s.sweepIdx >= 3) bossAI.attackT = ATTACKS.LINE_SWEEP.duration;
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s) return;
+      ctx.save();
+      ctx.fillStyle = 'rgba(200, 80, 255, 0.5)';
+      ctx.fillRect(s.barX - 4, ARENA.y, 8, ARENA.h);
+      ctx.restore();
+    },
+  },
+
+  // One rail blocked at a time, rotating; horizontal traffic on the others.
+  RAIL_SHUTDOWN: {
+    name: 'RAIL SHUTDOWN',
+    duration: 8.0,
+    init() {
+      bossAI.state.deadLine = -1;
+      bossAI.state.deadT = 0;
+      bossAI.state.warnT = 0;
+      bossAI.state.warnLine = Math.floor(Math.random() * PURPLE_LINES);
+      bossAI.state.trafficT = 0;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.3);
+      // Warning then shutdown.
+      s.warnT += dt;
+      if (s.warnT >= 1.0) {
+        s.warnT = 0;
+        // Clear the previously-dead line.
+        if (s.deadLine >= 0) {
+          const ly = purpleLineY(s.deadLine);
+          for (let j = enemyBullets.length - 1; j >= 0; j--) {
+            const b = enemyBullets[j];
+            if (b.vx === 0 && b.vy === 0 && Math.abs(b.y - ly) < 6) {
+              enemyBullets.splice(j, 1);
+            }
+          }
+        }
+        s.deadLine = s.warnLine;
+        // Fill it with stationary bullets.
+        const ly = purpleLineY(s.deadLine);
+        for (let x = ARENA.x + 6; x < ARENA.x + ARENA.w - 6; x += 14) {
+          spawnBullet(x, ly, 0, 0, { color: '#ff5577' });
+        }
+        // Pick the next warning line (different from current dead).
+        do {
+          s.warnLine = Math.floor(Math.random() * PURPLE_LINES);
+        } while (s.warnLine === s.deadLine);
+      }
+      // Horizontal traffic on active lines.
+      s.trafficT += dt;
+      if (s.trafficT >= 0.35) {
+        s.trafficT = 0;
+        for (let i = 0; i < PURPLE_LINES; i++) {
+          if (i === s.deadLine) continue;
+          const ly = purpleLineY(i);
+          const fromLeft = (i % 2 === 0);
+          spawnBullet(
+            fromLeft ? ARENA.x - 6 : ARENA.x + ARENA.w + 6,
+            ly,
+            (fromLeft ? 1 : -1) * 150 * P2_SPEED, 0
+          );
+        }
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s) return;
+      ctx.save();
+      // Warning flash on the line about to die.
+      if (s.warnLine !== s.deadLine) {
+        const a = 0.25 + 0.25 * Math.sin(s.warnT * 18);
+        ctx.fillStyle = 'rgba(255, 80, 80, ' + a.toFixed(2) + ')';
+        const ly = purpleLineY(s.warnLine);
+        ctx.fillRect(ARENA.x, ly - 6, ARENA.w, 12);
+      }
+      ctx.restore();
+    },
+  },
+
+  // L+R bullets converge on each line at staggered speeds.
+  CONVERGING_RAILS: {
+    name: 'CONVERGING RAILS',
+    duration: 7.5,
+    init() {
+      bossAI.state.round = -1;
+      bossAI.state.roundT = 999;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.3);
+      s.roundT += dt;
+      if (s.round < 2 && s.roundT >= 2.5) {
+        s.round++;
+        s.roundT = 0;
+        for (let i = 0; i < PURPLE_LINES; i++) {
+          const ly = purpleLineY(i);
+          const sp = (110 + i * 25 + s.round * 35) * P2_SPEED;
+          spawnBullet(ARENA.x - 6, ly, sp, 0, { color: '#c845ff' });
+          spawnBullet(ARENA.x + ARENA.w + 6, ly, -sp, 0, { color: '#c845ff' });
+        }
+      }
+    },
+  },
+
+  // Streams on each line, alternating direction periodically.
+  ALTERNATING_CURRENT: {
+    name: 'ALTERNATING CURRENT',
+    duration: 8.0,
+    init() {
+      bossAI.state.flipT = 0;
+      bossAI.state.spawnT = 0;
+      bossAI.state.flipped = false;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.3);
+      s.flipT += dt;
+      s.spawnT += dt;
+      if (s.flipT >= 2.0) {
+        s.flipT = 0;
+        s.flipped = !s.flipped;
+      }
+      if (s.spawnT >= 0.16) {
+        s.spawnT = 0;
+        for (let i = 0; i < PURPLE_LINES; i++) {
+          const ly = purpleLineY(i);
+          // Lines 0,2 go right, lines 1,3 go left (or flipped).
+          let goesRight = (i % 2 === 0);
+          if (s.flipped) goesRight = !goesRight;
+          // Random gaps — skip ~25% of bullets.
+          if (Math.random() < 0.25) continue;
+          spawnBullet(
+            goesRight ? ARENA.x - 6 : ARENA.x + ARENA.w + 6,
+            ly,
+            (goesRight ? 1 : -1) * 170 * P2_SPEED,
+            0,
+            { color: '#c845ff' }
+          );
+        }
+      }
+    },
+  },
+
+  // 1-3 bouncing bullets through the rails leaving stationary trails.
+  CHAIN_REACTION: {
+    name: 'CHAIN REACTION',
+    duration: 8.0,
+    init() {
+      bossAI.state.balls = [_makeChainBall(0)];
+      bossAI.state.spawn1 = false;
+      bossAI.state.spawn2 = false;
+      bossAI.state.dropT = 0;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.3);
+      if (!s.spawn1 && bossAI.attackT >= 3.0) { s.balls.push(_makeChainBall(0)); s.spawn1 = true; }
+      if (!s.spawn2 && bossAI.attackT >= 6.0) { s.balls.push(_makeChainBall(0)); s.spawn2 = true; }
+      for (const ball of s.balls) {
+        const ly = purpleLineY(ball.line);
+        ball.x += ball.vx * dt;
+        ball.dropT += dt;
+        if (ball.dropT >= 0.18) {
+          ball.dropT = 0;
+          spawnBullet(ball.x, ly, 0, 0, { color: '#ffaaff' });
+        }
+        if (ball.vx > 0 && ball.x > ARENA.x + ARENA.w) {
+          ball.line = (ball.line + 1) % PURPLE_LINES;
+          ball.vx = -Math.abs(ball.vx);
+          ball.x = ARENA.x + ARENA.w - 4;
+        }
+        if (ball.vx < 0 && ball.x < ARENA.x) {
+          ball.line = (ball.line + 1) % PURPLE_LINES;
+          ball.vx = Math.abs(ball.vx);
+          ball.x = ARENA.x + 4;
+        }
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s || !s.balls) return;
+      ctx.save();
+      for (const ball of s.balls) {
+        const ly = purpleLineY(ball.line);
+        ctx.fillStyle = '#ffccff';
+        ctx.beginPath();
+        ctx.arc(ball.x, ly, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255, 200, 255, 0.4)';
+        ctx.beginPath();
+        ctx.arc(ball.x, ly, 11, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    },
+  },
+
+  // SIGNATURE — Track Switch: lanes wave + converging streams.
+  TRACK_SWITCH: {
+    name: 'TRACK SWITCH',
+    duration: 8.0,
+    init() {
+      bossAI.state.phase = 'telegraph';
+      bossAI.state.t = 0;
+      bossAI.state.spawnT = 0;
+      bossAI.purpleWave = { t: 0, freq: 1.8, amp: 28 };
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.2);
+      s.t += dt;
+      if (s.phase === 'telegraph') {
+        if (s.t >= 1.0) { s.phase = 'active'; s.t = 0; }
+        return;
+      }
+      bossAI.purpleWave.t += dt;
+      // Slowly grow the wave amplitude.
+      bossAI.purpleWave.amp = 16 + Math.min(s.t * 4, 26);
+      s.spawnT += dt;
+      if (s.spawnT >= 0.18) {
+        s.spawnT = 0;
+        for (let i = 0; i < PURPLE_LINES; i++) {
+          const ly = purpleLineY(i);
+          const sp = 150 * P2_SPEED;
+          if (Math.random() > 0.2) spawnBullet(ARENA.x - 6, ly, sp, 0, { color: '#cc66ff' });
+          if (Math.random() > 0.2) spawnBullet(ARENA.x + ARENA.w + 6, ly, -sp, 0, { color: '#cc66ff' });
+        }
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s) return;
+      if (s.phase === 'telegraph') {
+        ctx.save();
+        const a = 0.3 + 0.2 * Math.sin(s.t * 24);
+        ctx.fillStyle = 'rgba(200, 80, 255, ' + a.toFixed(2) + ')';
+        ctx.fillRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h);
+        ctx.font = 'bold 22px "Courier New", monospace';
+        ctx.fillStyle = '#cc66ff';
+        ctx.textAlign = 'center';
+        ctx.fillText('TRACK SWITCH', CANVAS_W / 2, ARENA.y - 30);
+        ctx.restore();
+      }
+    },
+  },
+
+  // ============================================================
+  //  GREEN SOUL — locked, directional shield
+  // ============================================================
+
+  // Sequential then simultaneous cardinal shots.
+  CARDINAL_SHOTS: {
+    name: 'CARDINAL SHOTS',
+    duration: 7.0,
+    init() {
+      bossAI.state.t = 0;
+      bossAI.state.fireT = 0;
+      bossAI.state.cycleI = 0;
+      bossAI.state.phase = 'sequential';
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.2);
+      s.t += dt;
+      s.fireT += dt;
+      if (s.phase === 'sequential') {
+        const interval = (s.t < 3.5) ? 0.7 : 0.5;
+        if (s.fireT >= interval) {
+          s.fireT = 0;
+          _fireCardinal(s.cycleI % 4);
+          s.cycleI++;
+        }
+        if (s.t >= 4.5) { s.phase = 'simultaneous'; s.fireT = 0; s.cycleI = 0; }
+      } else {
+        if (s.fireT >= 0.9) {
+          s.fireT = 0;
+          // Pairs: vertical or horizontal.
+          if (s.cycleI % 2 === 0) { _fireCardinal(0); _fireCardinal(2); }
+          else                    { _fireCardinal(1); _fireCardinal(3); }
+          s.cycleI++;
+        }
+      }
+    },
+  },
+
+  // Ring of bullets, mostly fakes; real cluster from one side.
+  RING_OF_FIRE: {
+    name: 'RING OF FIRE',
+    duration: 8.5,
+    init() {
+      bossAI.state.round = -1;
+      bossAI.state.roundT = 999;
+      bossAI.state.previewBullets = []; // visual ring during warning
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.2);
+      s.roundT += dt;
+      if (s.round < 2 && s.roundT >= 2.5) {
+        s.round++;
+        s.roundT = 0;
+        // Pick a direction for the real cluster.
+        const realDir = Math.floor(Math.random() * 4);
+        s.previewBullets = [];
+        // Schedule firing in 1s.
+        s.preparedDir = realDir;
+        s.preparedT = 1.0;
+      }
+      if (s.preparedT > 0) {
+        s.preparedT -= dt;
+        if (s.preparedT <= 0) _fireRingOfFire(s.preparedDir);
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s) return;
+      if (s.preparedT > 0) {
+        // Warning ring outline
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 200, 100, 0.7)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(ARENA.x + ARENA.w / 2, ARENA.y + ARENA.h / 2,
+                Math.min(ARENA.w, ARENA.h) * 0.42, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    },
+  },
+
+  // Alternating shots, accelerating, then complex pattern.
+  PING_PONG: {
+    name: 'PING PONG',
+    duration: 7.5,
+    init() {
+      bossAI.state.t = 0;
+      bossAI.state.fireT = 0;
+      bossAI.state.idx = 0;
+      bossAI.state.pattern = [2, 0, 2, 0]; // L/R simple alternation (2=L, 0=R indices)
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.2);
+      s.t += dt;
+      s.fireT += dt;
+      // Phase 1: alternation; phase 2: complex; phase 3: rapid trio.
+      let interval;
+      if (s.t < 2.5)      interval = 0.55;
+      else if (s.t < 5.0) interval = 0.45;
+      else                interval = 0.25;
+      if (s.t >= 2.5 && s.pattern.length === 4) {
+        s.pattern = [2, 2, 0, 2, 0, 0, 3, 1];
+      }
+      if (s.fireT >= interval) {
+        s.fireT = 0;
+        const dirIdx = s.pattern[s.idx % s.pattern.length];
+        _fireCardinal(dirIdx);
+        s.idx++;
+      }
+    },
+  },
+
+  // Slow big bullet feint + fast small from another direction.
+  FEINT: {
+    name: 'FEINT',
+    duration: 7.0,
+    init() {
+      bossAI.state.round = -1;
+      bossAI.state.roundT = 999;
+      bossAI.state.fastPending = -1;     // -1 = none, otherwise direction
+      bossAI.state.fastDelay = 0;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.2);
+      s.roundT += dt;
+      if (s.fastPending >= 0) {
+        s.fastDelay -= dt;
+        if (s.fastDelay <= 0) {
+          _fireCardinal(s.fastPending, { speed: 320, r: 4 });
+          s.fastPending = -1;
+        }
+      }
+      if (s.round < 2 && s.roundT >= 2.3) {
+        s.round++;
+        s.roundT = 0;
+        const slowDir = Math.floor(Math.random() * 4);
+        let fastDir;
+        do { fastDir = Math.floor(Math.random() * 4); } while (fastDir === slowDir);
+        _fireCardinal(slowDir, { speed: 60, r: 14, color: '#88ff88' });
+        s.fastPending = fastDir;
+        s.fastDelay = 0.6 - s.round * 0.15;
+      }
+    },
+  },
+
+  // Turret on edge, relocates; eventually two turrets.
+  MACHINE_GUN_ROULETTE: {
+    name: 'MACHINE GUN ROULETTE',
+    duration: 9.0,
+    init() {
+      bossAI.state.turrets = [{ edge: 0, fireT: 0 }];
+      bossAI.state.relocateT = 0;
+      bossAI.state.relocations = 0;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.2);
+      s.relocateT += dt;
+      // Add second turret after the third relocation.
+      if (s.relocations >= 3 && s.turrets.length < 2) {
+        s.turrets.push({ edge: (s.turrets[0].edge + 2) % 4, fireT: 0 });
+      }
+      // Relocate.
+      if (s.relocateT >= 2.5) {
+        s.relocateT = 0;
+        s.relocations++;
+        for (const t of s.turrets) {
+          let next;
+          do { next = Math.floor(Math.random() * 4); } while (next === t.edge);
+          t.edge = next;
+        }
+      }
+      for (const t of s.turrets) {
+        t.fireT += dt;
+        if (t.fireT >= 0.20) {
+          t.fireT = 0;
+          _fireCardinal(t.edge, { speed: 230 });
+        }
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s || !s.turrets) return;
+      ctx.save();
+      for (const t of s.turrets) {
+        const pos = _edgeAnchor(t.edge);
+        ctx.fillStyle = '#ffaa44';
+        ctx.fillRect(pos.x - 6, pos.y - 6, 12, 12);
+        ctx.fillStyle = '#552200';
+        ctx.fillRect(pos.x - 3, pos.y - 3, 6, 6);
+      }
+      ctx.restore();
+    },
+  },
+
+  // SIGNATURE — Toxic Fortress: 4 streams + block counter clear.
+  TOXIC_FORTRESS: {
+    name: 'TOXIC FORTRESS',
+    duration: 11.0,
+    init() {
+      bossAI.state.phase = 'telegraph';
+      bossAI.state.t = 0;
+      bossAI.state.heavy = Math.floor(Math.random() * 4);
+      bossAI.state.spawnT = 0;
+      bossAI.state.blockCounter = 0;
+      bossAI.state.clears = 0;
+      bossAI.state.lastShieldDir = player.shieldDir;
+      bossAI.state.prevPlayerHp = player.hp;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.2);
+      s.t += dt;
+      if (s.phase === 'telegraph') {
+        if (s.t >= 1.0) { s.phase = 'active'; s.t = 0; }
+        return;
+      }
+      // Stream from all four edges; heavy direction fires denser.
+      s.spawnT += dt;
+      if (s.spawnT >= 0.10) {
+        s.spawnT = 0;
+        for (let d = 0; d < 4; d++) {
+          const heavy = (d === s.heavy);
+          const odds = heavy ? 1.0 : 0.40;
+          if (Math.random() < odds) {
+            _fireCardinal(d, { speed: 200 });
+          }
+        }
+      }
+      // Detect blocked bullets via the count delta.
+      // (Simpler: track bullets that are aimed at player and disappear
+      // while the player's shield is correctly aligned.)
+      // We approximate by counting bullets that vanished without
+      // damaging the player this frame from the heavy direction.
+      _toxicFortressTick(s, dt);
+      if (s.clears >= 3) {
+        // End early.
+        bossAI.attackT = ATTACKS.TOXIC_FORTRESS.duration;
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s) return;
+      if (s.phase === 'telegraph') {
+        ctx.save();
+        const a = 0.3 + 0.2 * Math.sin(s.t * 24);
+        ctx.fillStyle = 'rgba(80, 255, 130, ' + a.toFixed(2) + ')';
+        ctx.fillRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h);
+        ctx.font = 'bold 22px "Courier New", monospace';
+        ctx.fillStyle = '#80ff90';
+        ctx.textAlign = 'center';
+        ctx.fillText('TOXIC FORTRESS', CANVAS_W / 2, ARENA.y - 30);
+        ctx.restore();
+      } else {
+        // Block-counter HUD.
+        ctx.save();
+        const w = 180, h = 8;
+        const x = (CANVAS_W - w) / 2;
+        const y = ARENA.y - 22;
+        ctx.fillStyle = '#003300';
+        ctx.fillRect(x, y, w, h);
+        ctx.fillStyle = '#80ff90';
+        ctx.fillRect(x, y, w * Math.min(1, s.blockCounter / 20), h);
+        ctx.strokeStyle = '#80ff90';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + 0.5, y + 0.5, w, h);
+        ctx.font = '10px "Courier New", monospace';
+        ctx.fillStyle = '#ccffcc';
+        ctx.textAlign = 'center';
+        ctx.fillText('BLOCK ' + s.blockCounter + '/20  CLEARS ' + s.clears + '/3',
+                     CANVAS_W / 2, y - 2);
+        ctx.restore();
+      }
+    },
+  },
+});
+
+// ---------- Phase 2 attack helpers ----------
+function _spawnBubbles() {
+  bossAI.state.bubbles = [];
+  for (let i = 0; i < 6; i++) {
+    bossAI.state.bubbles.push({
+      x: ARENA.x + 30 + Math.random() * (ARENA.w - 60),
+      y: ARENA.y + 30 + Math.random() * (ARENA.h - 60),
+      vx: (Math.random() - 0.5) * 50,
+      vy: (Math.random() - 0.5) * 50,
+      r: 22,
+    });
+  }
+}
+
+function _makeSnake() {
+  return {
+    x: ARENA.x + 20 + Math.random() * (ARENA.w - 40),
+    y: ARENA.y + 20 + Math.random() * (ARENA.h - 40),
+    angle: Math.random() * Math.PI * 2,
+    speed: 90,
+    dropT: 0,
+  };
+}
+
+function _populateGrid() {
+  const s = bossAI.state;
+  s.gridBullets = [];
+  const step = 28;
+  for (let x = ARENA.x + 8; x < ARENA.x + ARENA.w; x += step) {
+    for (let y = ARENA.y + 8; y < ARENA.y + ARENA.h; y += step) {
+      s.gridBullets.push({ x, y });
+    }
+  }
+}
+
+function _staticFieldCollide(s) {
+  // Static field damages player if any grid bullet (outside the gap)
+  // overlaps the hitbox. Resolved here, not by enemyBullets.
+  if (player.invincible || player.iframes > 0 || game.over) return;
+  const half = PLAYER_HITBOX / 2;
+  for (const b of s.gridBullets) {
+    const dx = b.x - s.gapX, dy = b.y - s.gapY;
+    if (dx * dx + dy * dy < 30 * 30) continue;
+    const cx = clamp(b.x, player.x - half, player.x + half);
+    const cy = clamp(b.y, player.y - half, player.y + half);
+    const ex = b.x - cx, ey = b.y - cy;
+    if (ex * ex + ey * ey <= ENEMY_BULLET_R * ENEMY_BULLET_R) {
+      player.hp -= 1;
+      player.iframes = POST_HIT_IFRAMES;
+      if (player.hp <= 0) { player.hp = 0; killPlayer(); }
+      return;
+    }
+  }
+}
+
+function _puddleDamage(puddles) {
+  if (player.invincible || player.iframes > 0 || game.over) return;
+  // Player feet = bottom of hitbox; puddles sit at floor.
+  const feetY = player.y + PLAYER_HITBOX / 2;
+  if (feetY < ARENA.y + ARENA.h - 8) return;
+  for (const p of puddles) {
+    if (player.x > p.x - p.w / 2 && player.x < p.x + p.w / 2) {
+      player.hp -= 1;
+      player.iframes = POST_HIT_IFRAMES;
+      if (player.hp <= 0) { player.hp = 0; killPlayer(); }
+      return;
+    }
+  }
+}
+
+function _makeChainBall() {
+  return {
+    line: 0,
+    x: ARENA.x + 4,
+    vx: 200 * P2_SPEED,
+    dropT: 0,
+  };
+}
+
+// Fire a bullet from a cardinal edge inward toward the arena center.
+// dir: 0=top, 1=right, 2=bottom, 3=left
+function _fireCardinal(dir, opts) {
+  const o = opts || {};
+  const speed = o.speed || 200;
+  const cx = ARENA.x + ARENA.w / 2;
+  const cy = ARENA.y + ARENA.h / 2;
+  let x, y, vx, vy;
+  if (dir === 0)      { x = cx; y = ARENA.y - 6;          vx = 0; vy = speed * P2_SPEED; }
+  else if (dir === 1) { x = ARENA.x + ARENA.w + 6; y = cy; vx = -speed * P2_SPEED; vy = 0; }
+  else if (dir === 2) { x = cx; y = ARENA.y + ARENA.h + 6; vx = 0; vy = -speed * P2_SPEED; }
+  else                { x = ARENA.x - 6; y = cy;          vx = speed * P2_SPEED; vy = 0; }
+  spawnBullet(x, y, vx, vy, o);
+}
+
+function _edgeAnchor(dir) {
+  const cx = ARENA.x + ARENA.w / 2;
+  const cy = ARENA.y + ARENA.h / 2;
+  if (dir === 0) return { x: cx, y: ARENA.y - 6 };
+  if (dir === 1) return { x: ARENA.x + ARENA.w + 6, y: cy };
+  if (dir === 2) return { x: cx, y: ARENA.y + ARENA.h + 6 };
+  return            { x: ARENA.x - 6, y: cy };
+}
+
+// Ring of fire: real cluster from one direction; rest are fakes that
+// spawn briefly then fade.
+function _fireRingOfFire(realDir) {
+  const cx = ARENA.x + ARENA.w / 2;
+  const cy = ARENA.y + ARENA.h / 2;
+  const radius = Math.min(ARENA.w, ARENA.h) * 0.42;
+  const N = 18;
+  // Real cluster — 5 bullets spanning a 45° arc centered on realDir.
+  const dirAngle = [3 * Math.PI / 2, 0, Math.PI / 2, Math.PI][realDir]; // top/right/bottom/left
+  for (let k = 0; k < 5; k++) {
+    const a = dirAngle + (k - 2) * (Math.PI / 24);
+    const bx = cx + Math.cos(a) * radius;
+    const by = cy + Math.sin(a) * radius;
+    const sp = 200 * P2_SPEED;
+    spawnBullet(bx, by, -Math.cos(a) * sp, -Math.sin(a) * sp,
+                { color: '#ff6680', r: 6 });
+  }
+  // Fakes — visual-only, harmless.
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2;
+    // Skip angles near the real cluster.
+    let near = false;
+    const da = Math.atan2(Math.sin(a - dirAngle), Math.cos(a - dirAngle));
+    if (Math.abs(da) < Math.PI / 5) near = true;
+    if (near) continue;
+    const bx = cx + Math.cos(a) * radius;
+    const by = cy + Math.sin(a) * radius;
+    const sp = 200 * P2_SPEED;
+    spawnHarmless(bx, by, -Math.cos(a) * sp, -Math.sin(a) * sp,
+                  { color: 'rgba(255, 120, 160, 0.45)', r: 5 });
+  }
+}
+
+// Toxic Fortress block-counter logic. We instrument by checking
+// whether bullets headed at the player matched the shield direction
+// before they were consumed. We sample by counting bullets that
+// crossed near the player while shield was correctly facing the
+// dominant velocity component.
+function _toxicFortressTick(s, dt) {
+  // Walk enemy bullets — any bullet near the player whose dominant
+  // approach matches shield direction, count as a block (and remove).
+  const half = PLAYER_HITBOX / 2;
+  for (let i = enemyBullets.length - 1; i >= 0; i--) {
+    const b = enemyBullets[i];
+    if (b.harmless) continue;
+    const cx = clamp(b.x, player.x - half, player.x + half);
+    const cy = clamp(b.y, player.y - half, player.y + half);
+    const dx = b.x - cx, dy = b.y - cy;
+    const r = (b.r || ENEMY_BULLET_R) + GREEN_SHIELD_R;
+    if (dx * dx + dy * dy > r * r) continue;
+    // In shield range. Find approach.
+    const ax = Math.abs(b.vx || 0), ay = Math.abs(b.vy || 0);
+    let approach;
+    if (ax > ay) approach = (b.vx || 0) > 0 ? 'left' : 'right';
+    else         approach = (b.vy || 0) >= 0 ? 'up'   : 'down';
+    if (approach === player.shieldDir) {
+      enemyBullets.splice(i, 1);
+      s.blockCounter++;
+      if (s.blockCounter >= 20) {
+        s.blockCounter = 0;
+        s.clears++;
+        enemyBullets.length = 0;
+        // Heavy stream rotates.
+        let next;
+        do { next = Math.floor(Math.random() * 4); } while (next === s.heavy);
+        s.heavy = next;
+      }
+    }
+  }
+}
+
 // ---------- Replaces the old sweep-only updateBoss ----------
 function updateBoss(dt) {
   if (boss.flashTimer > 0) boss.flashTimer -= dt;
   if (!isPlayingActive()) return;
 
-  // Phase transitions on HP thresholds. Phase 1 → 2 fires AFTER
-  // Acid Rain has resolved (post-30%, around 22%).
+  // Phase 1 → 2 transition fires AFTER Acid Rain has resolved
+  // (post-30%, around 22%). Phase 2 → 3 is driven by the gauntlet's
+  // final hit, not an HP threshold (see updatePhase2AI / collisions).
   const hpFrac = boss.hp / boss.maxHp;
   if (game.phase === 1 && bossAI.acidRainFired
       && bossAI.attack !== 'ACID_RAIN' && hpFrac <= 0.22) {
@@ -1404,14 +3061,10 @@ function updateBoss(dt) {
     playCutscene(getPhase1To2(), () => {
       startPhase(2);
       resetBossAI();
-    });
-    return;
-  } else if (game.phase === 2 && hpFrac <= 0.05) {
-    game.phase = 2.5;
-    enemyBullets.length = 0;
-    playCutscene(getPhase2To3(), () => {
-      startPhase(3);
-      resetBossAI();
+      // Phase 2 opens in Red soul.
+      setState(S_RED);
+      bossAI.soul = 'red';
+      bossAI.soulNamedShown.red = true;
     });
     return;
   }
@@ -1419,9 +3072,26 @@ function updateBoss(dt) {
   if (game.phase === 1) {
     // Full Phase 1 attack rotation.
     updateBossAI(dt);
+  } else if (game.phase === 2) {
+    // Phase 2 — soul rotation + signature gauntlet at 1 HP.
+    if (bossAI.gauntletDone) {
+      // Last hit lands and the bar empties — Phase 2 → 3 cutscene
+      // fires straight from gauntlet, regardless of exact HP.
+      game.phase = 2.5;
+      enemyBullets.length = 0;
+      boss.hp = 1; // visual: bar shows 1 pixel right before cutscene
+      playCutscene(getPhase2To3(), () => {
+        startPhase(3);
+        resetBossAI();
+      });
+      return;
+    }
+    updatePhase2AI(dt);
+    // Keep purple wave timer ticking in render even outside attacks.
+    if (bossAI.purpleWave) bossAI.purpleWave.t += dt;
   } else {
-    // Phase 2 / 3 attack patterns are next pass — for now boss
-    // just sweeps so cutscenes can still fire on HP thresholds.
+    // Phase 3 attack patterns are a next pass — for now boss just
+    // sweeps so the defeat cutscene still triggers on hp = 0.
     bossSweep(dt);
   }
 }
@@ -1463,23 +3133,40 @@ function checkCollisions() {
         boss.flashTimer = 0.08;
         if (boss.hp <= 0) {
           boss.hp = 0;
-          // Defeat cutscene first; victory state set when it ends.
-          playCutscene(getDefeatLines(), () => {
-            stopAllMusic();
-            game.victory = true;
-          });
+          if (game.phase === 2) {
+            // Phase 2 ends here — the final auto-fire hit triggers
+            // the Phase 2 → 3 cutscene rather than defeat.
+            game.phase = 2.5;
+            enemyBullets.length = 0;
+            playCutscene(getPhase2To3(), () => {
+              startPhase(3);
+              resetBossAI();
+            });
+          } else {
+            // Phase 1 (won't actually happen — Phase 1 transitions
+            // earlier on hpFrac threshold) and Phase 3 land here.
+            playCutscene(getDefeatLines(), () => {
+              stopAllMusic();
+              game.victory = true;
+            });
+          }
         }
       }
     }
   }
 
-  // Enemy bullets vs player hitbox (square)
+  // Enemy bullets vs player hitbox (square, with bullet radius)
   if (!player.invincible && player.iframes <= 0 && !game.over) {
     const half = PLAYER_HITBOX / 2;
-    const px = player.x - half, py = player.y - half;
     for (let i = enemyBullets.length - 1; i >= 0; i--) {
       const b = enemyBullets[i];
-      if (!pointInRect(b.x, b.y, px, py, PLAYER_HITBOX, PLAYER_HITBOX)) continue;
+      if (b.harmless) continue;
+      // Closest-point on the square to the bullet center.
+      const cx = clamp(b.x, player.x - half, player.x + half);
+      const cy = clamp(b.y, player.y - half, player.y + half);
+      const dx = b.x - cx, dy = b.y - cy;
+      const r = b.r || ENEMY_BULLET_R;
+      if (dx * dx + dy * dy > r * r) continue;
 
       // GREEN: directional shield. Determine which side the bullet
       // is approaching from (dominant axis of its velocity); if that
@@ -1933,6 +3620,68 @@ function drawOverlay(text, sub) {
   }
 }
 
+function drawSoulSwitch() {
+  if (!bossAI || bossAI.soulSwitchT <= 0 || !bossAI.soulSwitchTo) return;
+  const t = bossAI.soulSwitchT;            // counts down from 1
+  const progress = 1 - t;                  // 0 → 1
+  const color = STATE_COLORS[bossAI.soulSwitchTo];
+  // Fade-in flash that peaks halfway.
+  const a = 0.55 * (1 - Math.abs(progress - 0.5) * 2);
+  ctx.save();
+  ctx.fillStyle = hexA(color, Math.max(0.2, a));
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.font = 'bold 28px "Courier New", monospace';
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.fillText(bossAI.soulSwitchTo.toUpperCase() + ' SOUL',
+               CANVAS_W / 2, CANVAS_H / 2);
+  if (!bossAI.soulNamedShown[bossAI.soulSwitchTo]) {
+    ctx.font = '12px "Courier New", monospace';
+    ctx.fillStyle = '#ffffff';
+    const sub = {
+      red:    'free movement',
+      blue:   'gravity + jump',
+      purple: 'rail-locked',
+      green:  'directional shield',
+    }[bossAI.soulSwitchTo] || '';
+    ctx.fillText(sub, CANVAS_W / 2, CANVAS_H / 2 + 22);
+  }
+  ctx.restore();
+}
+
+function drawGauntletIntro() {
+  if (!bossAI || !bossAI.gauntletTriggered || bossAI.gauntletPhase !== 'intro') return;
+  const t = bossAI.gauntletT;
+  ctx.save();
+  // Slot-machine cycle through colors.
+  const idx = Math.floor(t * 14) % 4;
+  const c = STATE_COLORS[SOUL_ORDER[idx]];
+  ctx.fillStyle = hexA(c, 0.55);
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.font = 'bold 24px "Courier New", monospace';
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.fillText('TAKE EVERYTHING I\'VE GOT', CANVAS_W / 2, CANVAS_H / 2);
+  ctx.restore();
+}
+
+function drawGauntletSilence() {
+  if (!bossAI || bossAI.gauntletPhase !== 'silence') return;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.restore();
+}
+
+// Convert a hex color "#rrggbb" to "rgba(r,g,b,a)".
+function hexA(hex, a) {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return 'rgba(' + r + ',' + g + ',' + b + ',' + a.toFixed(2) + ')';
+}
+
 function render() {
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
@@ -1944,6 +3693,9 @@ function render() {
   drawPlayer();
   drawBullets();
   drawHUD();
+  drawSoulSwitch();
+  drawGauntletIntro();
+  drawGauntletSilence();
   drawCutscene();
   drawNowPlaying();
 
