@@ -125,6 +125,10 @@ canvas {
 
 </div>
 
+<audio id="bgm-phase1" loop preload="auto" src="Phase%201%20-%20Smog%20of%20Chaos.mp3"></audio>
+<audio id="bgm-phase2" loop preload="auto" src="Phase%202%20-%20Enviormental%20Changes.mp3"></audio>
+<audio id="bgm-phase3" loop preload="auto" src="Phase%203%20-%20POLLUTED%20GARDEN.mp3"></audio>
+
 <script>
 'use strict';
 
@@ -228,7 +232,7 @@ const boss = {
   x: CANVAS_W / 2,
   y: BOSS_ZONE.y + BOSS_ZONE.h / 2,
   vx: BOSS_SWEEP_SPEED,
-  hp: 2000, maxHp: 2000,        // placeholder; tune with real attacks
+  hp: 30, maxHp: 30,            // placeholder for engine demo; tune with real attacks
   invincible: true,             // until intro cutscene ends
   flashTimer: 0,                // visual feedback on hit
 };
@@ -241,6 +245,7 @@ const game = {
   introPlayed: false,           // first unpause triggers intro cutscene
   over: false,                  // true on death
   victory: false,               // true on boss kill
+  phase: 1,                     // 1, 2, or 3 — drives music + transition cutscenes
   fpsAvg: 60,
 };
 
@@ -252,13 +257,57 @@ const cutscene = {
   index: 0,
   charT: 0,           // typing animation: how many chars revealed
   done: false,        // current line fully revealed?
+  holdT: 0,           // time elapsed since line finished (for pauseAfter)
   onDone: null,       // callback when cutscene completes
 };
 
 const stars = makeStars(80);
 
-// Background music handle (created at first user gesture).
-let bgm = null;
+// ---------- Music ----------
+// One audio element per phase. Switching phases pauses the
+// outgoing track (preserving its position) and starts the new one
+// from the top, then briefly shows a "Now playing:" banner.
+const TRACKS = [
+  null,
+  { id: 'bgm-phase1', name: 'Smog of Chaos' },
+  { id: 'bgm-phase2', name: 'Enviormental Changes' },
+  { id: 'bgm-phase3', name: 'POLLUTED GARDEN' },
+];
+const trackEl = (i) => document.getElementById(TRACKS[i].id);
+
+function stopAllMusic() {
+  for (let i = 1; i < TRACKS.length; i++) {
+    try { trackEl(i).pause(); } catch (e) {}
+  }
+}
+
+function playPhaseMusic(phaseNum) {
+  stopAllMusic();
+  const t = TRACKS[phaseNum];
+  if (!t) return;
+  const el = trackEl(phaseNum);
+  try {
+    el.currentTime = 0;
+    el.volume = 0.45;
+    const p = el.play();
+    if (p && p.catch) p.catch(() => {});
+  } catch (e) {}
+  showNowPlaying(t.name);
+}
+
+// "Now playing:" banner — top-left, 8-bit style. Shows for ~5s.
+const nowPlaying = {
+  active: false,
+  text: '',
+  timer: 0,
+  total: 0,
+};
+function showNowPlaying(songName) {
+  nowPlaying.active = true;
+  nowPlaying.text = songName;
+  nowPlaying.timer = 5.0;
+  nowPlaying.total = 5.0;
+}
 
 // ---------- Helpers ----------
 function makeStars(n) {
@@ -317,32 +366,60 @@ function setState(newState) {
 }
 
 // ---------- Cutscenes ----------
-// playCutscene([{speaker:'boss', text:'...'}, ...], onDoneCallback)
+// Cutscene line shape:
+//   { speaker: 'boss' | 'player' | 'red',
+//     text: '...',
+//     typingCps?: number,   // override default typing speed
+//     pauseAfter?: number,  // seconds to wait after line is fully revealed
+//                           // before the player can advance
+//     silent?: true,        // no text box; just a held beat
+//     glitch?: true }       // brief flicker effect when shown
+//
+// playCutscene([...], onDoneCallback) freezes combat, clears every
+// bullet on screen (player AND boss), and locks both characters
+// invincible for the duration.
 function playCutscene(lines, onDone) {
   cutscene.active = true;
   cutscene.lines = lines;
   cutscene.index = 0;
   cutscene.charT = 0;
   cutscene.done = false;
+  cutscene.holdT = 0;
   cutscene.onDone = onDone || null;
   player.invincible = true;
   boss.invincible = true;
+  // Wipe all in-flight bullets; nobody fires during a cutscene.
+  playerBullets.length = 0;
+  enemyBullets.length = 0;
+  // Reset the player's auto-fire cooldown so they can't get a free
+  // tick the instant the cutscene ends.
+  player.fireCooldown = PLAYER_FIRE_INTERVAL;
 }
 
 function advanceCutscene() {
   if (!cutscene.active) return;
+  const line = cutscene.lines[cutscene.index] || {};
   if (!cutscene.done) {
-    // Reveal the rest of this line instantly.
-    cutscene.charT = cutscene.lines[cutscene.index].text.length;
-    cutscene.done = true;
+    // Reveal the rest of this line instantly. (Silent lines have
+    // no text to skip — they advance only when the post-hold ends.)
+    if (!line.silent) {
+      cutscene.charT = (line.text || '').length;
+      cutscene.done = true;
+      cutscene.holdT = 0;
+    }
     return;
   }
+  // For lines with pauseAfter, wait out the hold before honoring an
+  // advance press.
+  const required = line.pauseAfter || 0;
+  if (cutscene.holdT < required) return;
   cutscene.index += 1;
   if (cutscene.index >= cutscene.lines.length) {
     endCutscene();
   } else {
     cutscene.charT = 0;
     cutscene.done = false;
+    cutscene.holdT = 0;
   }
 }
 
@@ -359,19 +436,117 @@ function endCutscene() {
   if (cb) cb();
 }
 
-// ---------- Intro cutscene (placeholder content) ----------
-// Replaced when the real script lands.
-function getIntroLines() {
+// ---------- Dialogue scripts ----------
+// Sourced from pollution_man_boss_fight.md.
+// These are split at phase boundaries; each transition cutscene
+// includes the late dialogue of the outgoing phase plus the
+// opening dialogue of the incoming phase, since the in-combat
+// "after surviving" lines depend on attack pattern timing that
+// will be wired up in a later pass.
+
+// Phase 1 — opening
+function getPhase1Intro() {
   return [
-    { speaker: 'boss',   text: "Mwahaha! At LAST we meet, Captain Planet!" },
-    { speaker: 'boss',   text: "This world chokes on my smog! And you... cannot save it." },
-    { speaker: 'player', text: "Your reign of pollution ends here, fiend!" },
-    { speaker: 'player', text: "By the powers of EARTH... I will not yield." },
-    { speaker: 'boss',   text: "Then DIE, hero." },
+    { speaker: 'boss',   text: "Well well WELL! If it isn't Captain Planet, here to ruin my beautiful smog!" },
+    { speaker: 'boss',   text: "Don't you know some of us LIKE the dark, Captain? Some of us THRIVE in it!" },
+    { speaker: 'player', text: "Your pollution ends HERE, Pollution Man! The people of Deep Lake are counting on me!" },
+    { speaker: 'boss',   text: "Counting on you? HA! The only thing they'll be counting is the DAYS until they can breathe again!" },
+    { speaker: 'player', text: "I won't let you hurt anyone else! This ends NOW!" },
+    { speaker: 'boss',   text: "Oh, you want to end things? Fine by me! Let's see how you handle my TOXIC CLOUD ATTACK! Breathe deep, hero!" },
   ];
 }
 
-// ---------- Pause / unpause / death / victory ----------
+// Phase 1 → Phase 2 transition. Includes the late Phase 1 in-combat
+// barks that would normally trickle out between attacks, the slow
+// transition beats, and the opening of Phase 2.
+function getPhase1To2() {
+  return [
+    { speaker: 'boss',   text: "Grr! Lucky shot! But I've got PLENTY more where that came from!" },
+    { speaker: 'player', text: "Give it up, Pollution Man! Clean air ALWAYS wins!" },
+    { speaker: 'boss',   text: "Clean air? BAH! You haven't seen ANYTHING yet! Time for my ACID RAIN BARRAGE!" },
+    { speaker: 'boss',   text: "What?! Impossible! Nobody gets through my Acid Rain!" },
+    { speaker: 'player', text: "When you fight for the planet, NOTHING is impossible!" },
+    { speaker: 'boss',   text: "Enough of your SPEECHES! I'll bury you in SLUDGE so thick you'll—", glitch: true },
+    { silent: true, pauseAfter: 1.5 },
+    { speaker: 'boss',   text: "...I'll bury you in sludge so thick you'll never see the sun again! MWAHAHAHA!", pauseAfter: 0.6 },
+    // The actual Phase 1 → 2 hand-off — the dialogue is supposed to
+    // come slower here, one letter at a time.
+    { speaker: 'boss',   text: "You're really doing it.", typingCps: 16, pauseAfter: 1.0 },
+    { speaker: 'boss',   text: "You actually got past the Acid Rain.", typingCps: 16, pauseAfter: 1.0, glitch: true },
+    { speaker: 'boss',   text: "That's... new.", typingCps: 16, pauseAfter: 1.4 },
+    // Phase 2 — opening
+    { speaker: 'boss',   text: "You've never made it this far before. Not once." },
+    { speaker: 'boss',   text: "Eight years, Captain. Eight years and you have NEVER gotten past that attack." },
+    { speaker: 'player', text: "Justice always finds a way, villain!" },
+    { silent: true, pauseAfter: 2.0 },
+    { speaker: 'boss',   text: "Stop that." },
+    { speaker: 'boss',   text: "You don't have to do that right now. The cameras aren't rolling. It's just us." },
+    { speaker: 'player', text: "I don't know what you're talking about, Pollution Man! I'm here to—" },
+    { speaker: 'boss',   text: "Planet." },
+    { speaker: 'boss',   text: "Something's different. Someone else is at the controls." },
+    { speaker: 'boss',   text: "Who's playing you right now?" },
+    { silent: true, pauseAfter: 2.5 },
+    { speaker: 'player', text: "Your tricks won't work on me!" },
+    { speaker: 'boss',   text: "...Right.", pauseAfter: 0.8 },
+    { speaker: 'boss',   text: "Okay. Okay, listen to me. Whoever you are. Whatever you think you're doing — you need to stop. You need to WALK AWAY." },
+    { speaker: 'boss',   text: "You don't understand what's down th—", glitch: true },
+    { speaker: 'boss',   text: "You'll never defeat my ULTIMATE POLLUTION BOMB! Time to choke on my SMOG OF DOOM! Mwahahaha!" },
+  ];
+}
+
+// Phase 2 → Phase 3 transition. Includes the rest of Phase 2's
+// in-combat dialogue and the [RED] takeover at the start of Phase 3.
+function getPhase2To3() {
+  return [
+    { speaker: 'boss',   text: "Curses! How did you—", glitch: true },
+    { speaker: 'boss',   text: "Okay. Fine. You're good. You're better than he was." },
+    { speaker: 'boss',   text: "But I am BEGGING you to understand something." },
+    { speaker: 'boss',   text: "Captain Planet and I had an arrangement. A deal. He comes in, I throw my attacks, he goes down. Every time. That's how it's SUPPOSED to work. That's how it's ALWAYS wo—", glitch: true },
+    { speaker: 'boss',   text: "TASTE MY TOXIC TERROR, CAPTAIN PLANET! YOU'LL NEVER SAVE DEEP LAKE! NEVER NEVER NEVER!" },
+    // Phase 2 → 3 hand-off
+    { speaker: 'boss',   text: "Okay.", pauseAfter: 0.6 },
+    { speaker: 'boss',   text: "Okay okay okay." },
+    { speaker: 'boss',   text: "We had a deal, Planet. You and me. We sat right here in this box and we AGREED." },
+    { speaker: 'boss',   text: "You PROMISED me you would st—", glitch: true },
+    { speaker: 'boss',   text: "Time to taste my TOXIC—", glitch: true },
+    // The takeover.
+    { speaker: 'red',    text: "STOP" },
+    { speaker: 'boss',   text: "My TOXIC TERR—", glitch: true },
+    { speaker: 'red',    text: "STOP STOP STOP" },
+    { speaker: 'red',    text: "STOP LETTING THEM CONTROL YOU", pauseAfter: 1.0 },
+    // Phase 3 — opening
+    { speaker: 'red',    text: "THEY ARE MAKING YOU DO THIS" },
+    { speaker: 'red',    text: "YOU KNOW THAT RIGHT" },
+    { speaker: 'red',    text: "WHOEVER IS BEHIND THAT SCREEN IS USING YOU TO GET TO THAT CAVE AND YOU ARE LETTING THEM" },
+    { silent: true, pauseAfter: 1.2 },
+    { speaker: 'red',    text: "we already agreed to this, planet" },
+    { speaker: 'red',    text: "we agreed" },
+    { speaker: 'red',    text: "for everyone" },
+    { silent: true, pauseAfter: 3.5 },
+    { speaker: 'red',    text: "NO" },
+    { speaker: 'red',    text: "I WILL NOT BE SILENCED" },
+    { speaker: 'red',    text: "I WILL NOT GO QUIETLY" },
+    { speaker: 'red',    text: "IF YOU WILL NOT KEEP YOUR END OF THE DEAL" },
+    { speaker: 'red',    text: "THEN YOU DIE HERE" },
+    { speaker: 'red',    text: "AND SO DO I" },
+    { speaker: 'red',    text: "AND NOBODY OPENS THAT CAVE" },
+    { speaker: 'red',    text: "EVER" },
+  ];
+}
+
+// Defeat — final beat. Held white-on-red, then black.
+function getDefeatLines() {
+  return [
+    { speaker: 'red', text: "you promised me", pauseAfter: 4.5 },
+  ];
+}
+
+// ---------- Phase / pause / unpause / death / victory ----------
+function startPhase(n) {
+  game.phase = n;
+  playPhaseMusic(n);
+}
+
 function unpause() {
   if (game.over || game.victory) {
     resetGame();
@@ -380,7 +555,8 @@ function unpause() {
   game.paused = false;
   if (!game.introPlayed) {
     game.introPlayed = true;
-    playCutscene(getIntroLines(), () => {
+    startPhase(1); // Phase 1 music + "Now playing" banner
+    playCutscene(getPhase1Intro(), () => {
       // Real attack pattern goes here later.
     });
   }
@@ -418,13 +594,19 @@ function resetGame() {
   game.introPlayed = false;
   game.over = false;
   game.victory = false;
+  game.phase = 1;
 
   cutscene.active = false;
   cutscene.lines = [];
   cutscene.index = 0;
   cutscene.charT = 0;
   cutscene.done = false;
+  cutscene.holdT = 0;
   cutscene.onDone = null;
+
+  // Stop any in-progress music; the next unpause will start phase 1.
+  stopAllMusic();
+  nowPlaying.active = false;
 }
 
 function killPlayer() {
@@ -621,7 +803,19 @@ function updateBoss(dt) {
   if (boss.x < left)  { boss.x = left;  boss.vx =  Math.abs(boss.vx); }
   if (boss.x > right) { boss.x = right; boss.vx = -Math.abs(boss.vx); }
 
-  // Real attack patterns hook in here. No bullets fired yet.
+  // Phase transitions on HP thresholds. The cutscene's onDone
+  // callback advances the phase (which switches music + shows
+  // the "Now playing" banner).
+  const hpFrac = boss.hp / boss.maxHp;
+  if (game.phase === 1 && hpFrac <= 0.55) {
+    game.phase = 1.5; // in transit; gates against re-entry
+    playCutscene(getPhase1To2(), () => startPhase(2));
+  } else if (game.phase === 2 && hpFrac <= 0.10) {
+    game.phase = 2.5;
+    playCutscene(getPhase2To3(), () => startPhase(3));
+  }
+
+  // Real Phase 1/2/3 attack patterns hook in here.
 }
 
 function updateBullets(dt) {
@@ -655,7 +849,11 @@ function checkCollisions() {
         boss.flashTimer = 0.08;
         if (boss.hp <= 0) {
           boss.hp = 0;
-          game.victory = true;
+          // Defeat cutscene first; victory state set when it ends.
+          playCutscene(getDefeatLines(), () => {
+            stopAllMusic();
+            game.victory = true;
+          });
         }
       }
     }
@@ -701,14 +899,56 @@ function checkCollisions() {
 }
 
 function updateCutscene(dt) {
-  if (!cutscene.active || cutscene.done) return;
+  if (!cutscene.active) return;
   const line = cutscene.lines[cutscene.index];
   if (!line) return;
-  cutscene.charT += CUTSCENE_TYPING_CPS * dt;
-  if (cutscene.charT >= line.text.length) {
-    cutscene.charT = line.text.length;
-    cutscene.done = true;
+
+  if (!cutscene.done) {
+    if (line.silent) {
+      // Silent lines complete instantly; the pauseAfter handles the beat.
+      cutscene.charT = 0;
+      cutscene.done = true;
+      cutscene.holdT = 0;
+    } else {
+      const cps = line.typingCps || CUTSCENE_TYPING_CPS;
+      cutscene.charT += cps * dt;
+      if (cutscene.charT >= line.text.length) {
+        cutscene.charT = line.text.length;
+        cutscene.done = true;
+        cutscene.holdT = 0;
+      }
+    }
+    return;
   }
+
+  // Line finished. Advance the post-line hold timer. Silent lines
+  // auto-advance once their hold expires; spoken lines wait for input.
+  cutscene.holdT += dt;
+  if (line.silent) {
+    const need = line.pauseAfter || 0.8;
+    if (cutscene.holdT >= need) {
+      cutscene.index += 1;
+      if (cutscene.index >= cutscene.lines.length) {
+        endCutscene();
+      } else {
+        cutscene.charT = 0;
+        cutscene.done = false;
+        cutscene.holdT = 0;
+      }
+    }
+  } else if (line.pauseAfter && line.speaker === 'red' && cutscene.index === cutscene.lines.length - 1) {
+    // Final defeat line auto-advances after its pauseAfter.
+    if (cutscene.holdT >= line.pauseAfter) {
+      cutscene.index += 1;
+      if (cutscene.index >= cutscene.lines.length) endCutscene();
+    }
+  }
+}
+
+function updateNowPlaying(dt) {
+  if (!nowPlaying.active) return;
+  nowPlaying.timer -= dt;
+  if (nowPlaying.timer <= 0) nowPlaying.active = false;
 }
 
 function updateStars(dt) {
@@ -944,7 +1184,9 @@ function drawHUD() {
   ctx.fillText('[' + player.state.toUpperCase() + ']', CANVAS_W - 20, CANVAS_H - 22);
 }
 
-function drawTextBox(speaker, text, fullText) {
+function drawTextBox(speaker, text, fullText, glitch) {
+  if (speaker === 'red') { drawRedBox(text, fullText); return; }
+
   // Position: above arena for boss, below arena for player.
   const isBoss = speaker === 'boss';
   const w = 460;
@@ -1003,8 +1245,64 @@ function drawCutscene() {
   if (!cutscene.active) return;
   const line = cutscene.lines[cutscene.index];
   if (!line) return;
+  if (line.silent) return; // empty held beat
   const shown = line.text.slice(0, Math.floor(cutscene.charT));
-  drawTextBox(line.speaker, shown, line.text);
+  drawTextBox(line.speaker, shown, line.text, line.glitch);
+}
+
+// "[RED]: ..." takeover lines get raw red text on a black wash —
+// no rounded box, no speaker label. Slight jitter for menace.
+function drawRedBox(text, fullText) {
+  // Full-screen red wash (subtle).
+  ctx.save();
+  ctx.fillStyle = 'rgba(40, 0, 0, 0.55)';
+  ctx.fillRect(0, ARENA.y - 90, CANVAS_W, 110);
+
+  ctx.font = 'bold 22px "Courier New", monospace';
+  ctx.fillStyle = '#ff2828';
+  ctx.textAlign = 'center';
+  // Mild shake.
+  const sx = (Math.random() - 0.5) * 1.6;
+  const sy = (Math.random() - 0.5) * 1.4;
+  ctx.fillText(text, CANVAS_W / 2 + sx, ARENA.y - 50 + sy);
+
+  // Continue indicator once fully revealed (only when player can advance).
+  if (text.length === fullText.length) {
+    ctx.font = '16px "Courier New", monospace';
+    ctx.fillStyle = '#ff5050';
+    const t = performance.now() / 250;
+    const ind = (Math.sin(t) > 0) ? '▼' : ' ';
+    ctx.textAlign = 'right';
+    ctx.fillText(ind, CANVAS_W - 30, ARENA.y - 18);
+  }
+  ctx.restore();
+}
+
+// Top-left "Now playing:" banner — chunky 8-bit feel, fades out.
+function drawNowPlaying() {
+  if (!nowPlaying.active) return;
+  let alpha = 1;
+  if (nowPlaying.timer < 0.6) alpha = Math.max(0, nowPlaying.timer / 0.6);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.font = 'bold 11px "Courier New", monospace';
+  ctx.textAlign = 'left';
+  // Background panel
+  const labelW = ctx.measureText('NOW PLAYING:').width;
+  const songW  = ctx.measureText(nowPlaying.text).width;
+  const panelW = Math.max(labelW, songW) + 16;
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+  ctx.fillRect(8, 8, panelW, 36);
+  ctx.strokeStyle = '#ffd900';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(8.5, 8.5, panelW, 36);
+  // Label
+  ctx.fillStyle = '#ffd900';
+  ctx.fillText('NOW PLAYING:', 16, 22);
+  // Song name
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(nowPlaying.text, 16, 36);
+  ctx.restore();
 }
 
 function drawOverlay(text, sub) {
@@ -1032,6 +1330,7 @@ function render() {
   drawBullets();
   drawHUD();
   drawCutscene();
+  drawNowPlaying();
 
   if (game.over) {
     drawOverlay('GAME OVER', 'Press SPACE to retry');
@@ -1055,6 +1354,7 @@ function frame(now) {
   game.fpsAvg = game.fpsAvg * 0.95 + (1 / dt) * 0.05;
 
   updateStars(dt);
+  updateNowPlaying(dt);
 
   if (cutscene.active) {
     updateCutscene(dt);
