@@ -804,6 +804,29 @@ window.addEventListener('keydown', (e) => {
     return;
   }
 
+  // Debug: Shift + R skips to the next phase. Cuts straight through
+  // the cutscenes/HP grind so the dev can iterate on later phases
+  // without replaying earlier ones.
+  if (e.shiftKey && (e.key === 'R' || e.key === 'r')) {
+    e.preventDefault();
+    if (cutscene.active || defeatSeq.active || game.over) return;
+    if (game.phase === 1) {
+      enemyBullets.length = 0;
+      playerBullets.length = 0;
+      startPhase(2);
+      startPhase2();
+    } else if (game.phase === 2) {
+      enemyBullets.length = 0;
+      playerBullets.length = 0;
+      startPhase(3);
+      resetBossAI();
+      startPhase3();
+    } else if (game.phase === 3) {
+      startDefeatSequence();
+    }
+    return;
+  }
+
   keys.add(e.key);
 });
 window.addEventListener('keyup', (e) => { keys.delete(e.key); });
