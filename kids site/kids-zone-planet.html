@@ -804,25 +804,39 @@ window.addEventListener('keydown', (e) => {
     return;
   }
 
-  // Debug: Shift + R skips to the next phase. Cuts straight through
-  // the cutscenes/HP grind so the dev can iterate on later phases
-  // without replaying earlier ones.
+  // Debug: Shift + R deals a quarter of the boss's max HP as
+  // instant damage. Press it a few times to fast-forward into
+  // the next phase / defeat without grinding the bar down.
+  // Bypasses boss invincibility so it also works mid-cutscene.
   if (e.shiftKey && (e.key === 'R' || e.key === 'r')) {
     e.preventDefault();
-    if (cutscene.active || defeatSeq.active || game.over) return;
-    if (game.phase === 1) {
-      enemyBullets.length = 0;
-      playerBullets.length = 0;
-      startPhase(2);
-      startPhase2();
-    } else if (game.phase === 2) {
-      enemyBullets.length = 0;
-      playerBullets.length = 0;
-      startPhase(3);
-      resetBossAI();
-      startPhase3();
-    } else if (game.phase === 3) {
-      startDefeatSequence();
+    if (game.over || game.victory || defeatSeq.active) return;
+    const dmg = Math.max(1, Math.floor(boss.maxHp / 4));
+    boss.hp = Math.max(0, boss.hp - dmg);
+    boss.flashTimer = 0.08;
+    // If we drove HP to 0 outside of a normal collision (e.g.,
+    // during a cutscene) the regular death routing won't fire on
+    // its own — drive the phase transition directly.
+    if (boss.hp <= 0 && !cutscene.active) {
+      if (game.phase === 1) {
+        game.phase = 1.5;
+        enemyBullets.length = 0;
+        boss.hp = 1;
+        playCutscene(getPhase1To2(), () => {
+          startPhase(2);
+          startPhase2();
+        });
+      } else if (game.phase === 2) {
+        game.phase = 2.5;
+        enemyBullets.length = 0;
+        playCutscene(getPhase2To3(), () => {
+          startPhase(3);
+          resetBossAI();
+          startPhase3();
+        });
+      } else if (game.phase === 3) {
+        startDefeatSequence();
+      }
     }
     return;
   }
