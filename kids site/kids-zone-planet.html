@@ -569,21 +569,34 @@ function getPhase1Intro() {
   ];
 }
 
-// Phase 1 → Phase 2 transition. Includes the late Phase 1 in-combat
-// barks that would normally trickle out between attacks, the slow
-// transition beats, and the opening of Phase 2.
-function getPhase1To2() {
+// Pre-Acid Rain barks — fires when Pollution Man is about to launch
+// Acid Rain (around 30% HP). Combat halts, the dialogue plays, then
+// the Acid Rain attack begins.
+function getPreAcidRain() {
   return [
     { speaker: 'boss',   text: "Grr! Lucky shot! But I've got PLENTY more where that came from!" },
     { speaker: 'player', text: "Give it up, Pollution Man! Clean air ALWAYS wins!" },
     { speaker: 'boss',   text: "Clean air? BAH! You haven't seen ANYTHING yet! Time for my ACID RAIN BARRAGE!" },
+  ];
+}
+
+// Post-Acid Rain barks — fires immediately after the Acid Rain attack
+// resolves. Surprise → comeback → tries to keep up the act → late laugh.
+function getPostAcidRain() {
+  return [
     { speaker: 'boss',   text: "What?! Impossible! Nobody gets through my Acid Rain!" },
     { speaker: 'player', text: "When you fight for the planet, NOTHING is impossible!" },
     { speaker: 'boss',   text: "Enough of your SPEECHES! I'll bury you in SLUDGE so thick you'll—", glitch: true },
     { silent: true, pauseAfter: 1.5 },
     { speaker: 'boss',   text: "...I'll bury you in sludge so thick you'll never see the sun again! MWAHAHAHA!", pauseAfter: 0.6 },
-    // The actual Phase 1 → 2 hand-off — the dialogue is supposed to
-    // come slower here, one letter at a time.
+  ];
+}
+
+// Phase 1 → Phase 2 transition — only the slow handoff beats and the
+// opening of Phase 2. The "ACID RAIN" barks have moved into the
+// pre/post Acid Rain cutscenes so they fire at the right moment.
+function getPhase1To2() {
+  return [
     { speaker: 'boss',   text: "You're really doing it.", typingCps: 16, pauseAfter: 1.0 },
     { speaker: 'boss',   text: "You actually got past the Acid Rain.", typingCps: 16, pauseAfter: 1.0, glitch: true },
     { speaker: 'boss',   text: "That's... new.", typingCps: 16, pauseAfter: 1.4 },
@@ -987,7 +1000,15 @@ const bossAI = {
   history: [],         // last few attack ids (for "no immediate repeat")
   counter: 0,          // attacks performed this phase
   firstAttack: true,
+  // Acid Rain handshake — three steps:
+  //   1. preAcidRainPlayed: pre-attack cutscene has fired
+  //   2. acidRainFired:     the Acid Rain attack itself ran
+  //   3. postAcidRainPlayed: post-attack cutscene has fired
+  // Phase 1 → 2 transition only fires after step 3.
+  preAcidRainPlayed: false,
   acidRainFired: false,
+  postAcidRainPending: false,
+  postAcidRainPlayed: false,
   bulletSpeedMul: 1.0, // bumps to 1.3 after Acid Rain resolves
   state: {},           // attack-specific scratch state
 };
@@ -999,7 +1020,10 @@ function resetBossAI() {
   bossAI.history = [];
   bossAI.counter = 0;
   bossAI.firstAttack = true;
+  bossAI.preAcidRainPlayed = false;
   bossAI.acidRainFired = false;
+  bossAI.postAcidRainPending = false;
+  bossAI.postAcidRainPlayed = false;
   bossAI.bulletSpeedMul = 1.0;
   bossAI.state = {};
   // ---- Phase 2 cycling state ----
@@ -1067,6 +1091,9 @@ function endAttack() {
     // Per spec: faster bullets thereafter.
     bossAI.bulletSpeedMul = 1.3;
     bossAI.downtime = 0.5; // brief breather after Acid Rain
+    // Queue the post-Acid-Rain barks; updateBoss will fire them on
+    // the next frame, once any in-flight cutscene work has settled.
+    bossAI.postAcidRainPending = true;
     return;
   }
   bossAI.counter++;
@@ -1088,16 +1115,9 @@ function bossSweep(dt, speedMul) {
 }
 
 function updateBossAI(dt) {
-  // Acid Rain interrupt at 30% HP — fires only once per phase.
-  if (game.phase === 1 && !bossAI.acidRainFired
-      && bossAI.attack !== 'ACID_RAIN'
-      && boss.hp / boss.maxHp <= 0.30) {
-    bossAI.acidRainFired = true;
-    enemyBullets.length = 0; // clean slate for the signature
-    bossAI.attack = null;
-    bossAI.downtime = 0;
-    startAttack('ACID_RAIN');
-  }
+  // The Acid Rain interrupt is no longer triggered here — updateBoss
+  // now handles the pre-cutscene → attack → post-cutscene → Phase 2
+  // handshake itself so the dialogue plays at the right moments.
 
   if (!bossAI.attack) {
     // Downtime: boss sweeps, waits to pick the next attack.
@@ -1191,7 +1211,7 @@ const ATTACKS = {
       bossSweep(dt, 1.1);
       s.streamT += dt;
       s.aimT += dt;
-      if (s.streamT >= 0.22) {
+      if (s.streamT >= 0.30) {
         s.streamT = 0;
         const speed = 130 * bossAI.bulletSpeedMul;
         for (let i = 0; i < s.nozzleX.length; i++) {
@@ -3824,19 +3844,49 @@ function updateBoss(dt) {
   if (boss.flashTimer > 0) boss.flashTimer -= dt;
   if (!isPlayingActive()) return;
 
-  // Phase 1 → 2 transition fires AFTER Acid Rain has resolved
-  // (post-30%, around 22%). Phase 2 → 3 is driven by the gauntlet's
-  // final hit, not an HP threshold (see updatePhase2AI / collisions).
   const hpFrac = boss.hp / boss.maxHp;
-  if (game.phase === 1 && bossAI.acidRainFired
-      && bossAI.attack !== 'ACID_RAIN' && hpFrac <= 0.22) {
-    game.phase = 1.5;
-    enemyBullets.length = 0;
-    playCutscene(getPhase1To2(), () => {
-      startPhase(2);
-      startPhase2();
-    });
-    return;
+
+  // Phase 1 dialogue handshake around Acid Rain. Three steps:
+  //   (a) Pre-Acid-Rain barks fire when boss reaches 30% HP, then
+  //       the Acid Rain attack begins as soon as the cutscene ends.
+  //   (b) Post-Acid-Rain barks fire as soon as the Acid Rain attack
+  //       has resolved (queued via bossAI.postAcidRainPending).
+  //   (c) Phase 1 → 2 transition fires once the post barks have
+  //       played AND the boss is at low HP (or the death fallback
+  //       in checkCollisions kicks in).
+  if (game.phase === 1) {
+    if (!bossAI.preAcidRainPlayed
+        && bossAI.attack !== 'ACID_RAIN'
+        && hpFrac <= 0.30) {
+      bossAI.preAcidRainPlayed = true;
+      enemyBullets.length = 0;
+      bossAI.attack = null;
+      bossAI.downtime = 0;
+      playCutscene(getPreAcidRain(), () => {
+        bossAI.acidRainFired = true;
+        startAttack('ACID_RAIN');
+      });
+      return;
+    }
+    if (bossAI.postAcidRainPending && bossAI.attack !== 'ACID_RAIN') {
+      bossAI.postAcidRainPending = false;
+      enemyBullets.length = 0;
+      playCutscene(getPostAcidRain(), () => {
+        bossAI.postAcidRainPlayed = true;
+      });
+      return;
+    }
+    if (bossAI.postAcidRainPlayed
+        && bossAI.attack !== 'ACID_RAIN'
+        && hpFrac <= 0.22) {
+      game.phase = 1.5;
+      enemyBullets.length = 0;
+      playCutscene(getPhase1To2(), () => {
+        startPhase(2);
+        startPhase2();
+      });
+      return;
+    }
   }
 
   if (game.phase === 1) {
