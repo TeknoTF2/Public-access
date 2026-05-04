@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<title>~ Escape Basement World ~ TV Odyssey Kids Zone</title>
+<style>
+body {
+  background-color: #ffd900;
+  background-image:
+    repeating-linear-gradient(45deg, transparent 0, transparent 18px, rgba(255,255,255,0.35) 18px, rgba(255,255,255,0.35) 19px);
+  font-family: 'Comic Sans MS', 'Comic Sans', cursive, sans-serif;
+  color: #2c1810;
+  margin: 0;
+  padding: 16px 10px;
+  user-select: none;
+}
+
+.frame {
+  width: 760px;
+  max-width: 96vw;
+  margin: 0 auto;
+  background: #fff;
+  border: 4px solid #2c1810;
+  box-shadow: 8px 8px 0 #2c1810;
+}
+
+.stripes-bar {
+  height: 22px;
+  background: repeating-linear-gradient(
+    to right,
+    #e91e63 0, #e91e63 40px,
+    #ff9800 40px, #ff9800 80px,
+    #ffd900 80px, #ffd900 120px,
+    #4caf50 120px, #4caf50 160px,
+    #2196f3 160px, #2196f3 200px,
+    #9c27b0 200px, #9c27b0 240px
+  );
+  border-top: 2px solid #2c1810;
+  border-bottom: 2px solid #2c1810;
+}
+
+.header {
+  background: linear-gradient(180deg, #5c3317 0%, #2c1810 100%);
+  text-align: center;
+  padding: 22px 10px;
+  border-bottom: 4px solid #2c1810;
+  color: #ffd900;
+}
+.header h1 {
+  font-family: 'Comic Sans MS', cursive;
+  font-size: 36px;
+  margin: 0;
+  text-shadow: 3px 3px 0 #000;
+  letter-spacing: 2px;
+}
+.header .sub {
+  color: #c0a882;
+  font-size: 13px;
+  font-style: italic;
+  margin-top: 6px;
+}
+
+.splash {
+  text-align: center;
+  padding: 40px 30px;
+  min-height: 360px;
+  background: #fff8d0;
+}
+.splash p {
+  font-size: 15px;
+  line-height: 1.6;
+  margin: 14px auto;
+  max-width: 520px;
+}
+.splash .controls {
+  background: #fff;
+  border: 3px solid #2c1810;
+  padding: 12px 16px;
+  display: inline-block;
+  margin: 10px 0;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  text-align: left;
+}
+.start-btn {
+  font-family: 'Comic Sans MS', cursive;
+  font-size: 28px;
+  font-weight: bold;
+  background: #4caf50;
+  color: #fff;
+  padding: 16px 40px;
+  border: 4px solid #2c1810;
+  border-radius: 14px;
+  box-shadow: 5px 5px 0 #2c1810;
+  cursor: pointer;
+  margin-top: 14px;
+  letter-spacing: 1px;
+}
+.start-btn:hover { background: #ff5722; }
+.start-btn:active { transform: translate(3px, 3px); box-shadow: 0 0 0 #2c1810; }
+.audio-note {
+  font-size: 12px; color: #666; margin-top: 16px;
+}
+
+.game-area {
+  display: none;
+  padding: 12px;
+  background: #1a0e08;
+  text-align: center;
+}
+.game-area.visible { display: block; }
+.canvas-wrap {
+  display: inline-block;
+  border: 4px solid #2c1810;
+  box-shadow: inset 0 0 30px rgba(0,0,0,0.7), 6px 6px 0 #000;
+  background: #000;
+  line-height: 0;
+}
+canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+.hint {
+  margin-top: 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  color: #c0a882;
+  letter-spacing: 1px;
+}
+
+.win-screen {
+  display: none;
+  text-align: center;
+  padding: 60px 30px;
+  background: linear-gradient(180deg, #4caf50 0%, #1b5e20 100%);
+  color: #fff;
+  min-height: 360px;
+}
+.win-screen.visible { display: block; }
+.win-screen h2 {
+  font-size: 44px;
+  margin: 0 0 20px 0;
+  text-shadow: 4px 4px 0 #000;
+  letter-spacing: 3px;
+}
+.win-screen p {
+  font-size: 18px;
+  line-height: 1.6;
+  margin: 16px auto;
+  max-width: 480px;
+}
+.win-screen .back-link {
+  display: inline-block;
+  background: #fff;
+  color: #1b5e20;
+  padding: 14px 32px;
+  text-decoration: none;
+  border: 4px solid #000;
+  border-radius: 12px;
+  box-shadow: 5px 5px 0 #000;
+  font-family: 'Comic Sans MS', cursive;
+  font-size: 20px;
+  font-weight: bold;
+  margin-top: 18px;
+}
+.win-screen .back-link:hover { background: #ffd900; }
+
+.footer-bar {
+  text-align: center;
+  padding: 10px;
+  background: #2c1810;
+  color: #ffd900;
+  font-size: 11px;
+  border-top: 4px solid #2c1810;
+}
+.footer-bar a { color: #ffd900; }
+.footer-bar a:hover { color: #fff; }
+</style>
+</head>
+<body>
+
+<div class="frame">
+
+<div class="stripes-bar"></div>
+
+<div class="header">
+  <h1>~ ESCAPE BASEMENT WORLD ~</h1>
+  <div class="sub">Find your way out of the maze!</div>
+</div>
+
+<!-- SPLASH -->
+<div id="splash" class="splash">
+  <p style="font-size:18px;"><b>Are you LOST in the basement?</b></p>
+  <p>
+    Walk through the yellow halls, open brown doors to find new passages,
+    and look for the GREEN door to escape!
+  </p>
+  <div class="controls">
+    &uarr; &nbsp;walk forward<br>
+    &darr; &nbsp;walk backward<br>
+    &larr; &nbsp;turn left<br>
+    &rarr; &nbsp;turn right<br>
+  </div>
+  <p style="font-size:13px; color:#666;">
+    Tip: bumping into a brown door takes you to a hallway.
+  </p>
+  <button id="start-btn" class="start-btn">PLAY!</button>
+  <div class="audio-note">
+    Music will start when you click. Make sure your speakers are on.
+  </div>
+</div>
+
+<!-- GAME -->
+<div id="game-area" class="game-area">
+  <div class="canvas-wrap">
+    <canvas id="game" width="640" height="400"></canvas>
+  </div>
+  <div class="hint">&uarr;&darr; walk &nbsp;&middot;&nbsp; &larr;&rarr; turn</div>
+</div>
+
+<!-- WIN -->
+<div id="win-screen" class="win-screen">
+  <h2>YOU MADE IT OUT!</h2>
+  <p>You found the green door.<br>Daylight again.</p>
+  <a class="back-link" href="../kids-zone.html">Back to Kids Zone</a>
+</div>
+
+<div class="footer-bar">
+  <a href="../kids-zone.html">&larr; Back to Kids Zone</a>
+</div>
+
+</div>
+
+<audio id="bgm" loop preload="auto" src="liminal%20mallcore%20loop%20small.mp3"></audio>
+
+<script>
+'use strict';
+
+// ============================================================
+// Escape Basement World — raycasting walking simulator
+// ============================================================
+// Coordinate system:
+//   Tiles are 1×1 units on an integer grid. Player position
+//   (px, py) is a float; player faces angle pAngle in radians
+//   (0 = +x east, PI/2 = +y south).
+//
+// Maze structure (deterministic, per-tile, lazy):
+//   - tile (x, y) where x even, y even  → corridor (always floor)
+//   - tile (x, y) where x odd,  y odd   → wall pillar (always wall)
+//   - tile (x, y) mixed odd/even        → passage candidate;
+//       60% open, 35% wall, 5% brown door.
+//       After the 10-min mark, *newly generated* walls have a
+//       25% chance to be a green door (the exit) instead.
+//
+//   Each tile is generated once on first read and cached, so
+//   tiles already explored before the 10-min mark stay as they
+//   were — only NEW walls (newly generated after 10 min) get
+//   the green-door roll.
+//
+// Hallways are a separate, transient world: a 1-tile-wide
+// straight corridor of length 15-30. Music pauses on entry and
+// resumes on exit. On exit the player is dropped into a fresh
+// area of the maze a short distance from where they entered.
+// ============================================================
+
+// ---------- Constants ----------
+const CANVAS_W = 640;
+const CANVAS_H = 400;
+const NUM_RAYS = 200;
+const FOV = Math.PI / 3; // 60°
+const RENDER_DIST_MAZE = 14;
+const RENDER_DIST_HALLWAY = 2.6;
+
+const TILE_FLOOR       = 0;
+const TILE_WALL        = 1;
+const TILE_DOOR_BROWN  = 2;
+const TILE_DOOR_GREEN  = 3;
+
+const STEP_ANIM_MS = 220;
+const TURN_ANIM_MS = 170;
+
+const HALLWAY_LEN_MIN = 15;
+const HALLWAY_LEN_MAX = 30;
+
+const GREEN_DOOR_AFTER_MS = 10 * 60 * 1000; // 10 minutes (hidden)
+const GREEN_DOOR_CHANCE   = 0.25;
+const BROWN_DOOR_CHANCE   = 0.05;
+const PASSAGE_OPEN_CHANCE = 0.60;
+
+// ---------- DOM ----------
+const splash    = document.getElementById('splash');
+const gameArea  = document.getElementById('game-area');
+const winScreen = document.getElementById('win-screen');
+const startBtn  = document.getElementById('start-btn');
+const canvas    = document.getElementById('game');
+const ctx       = canvas.getContext('2d');
+const bgm       = document.getElementById('bgm');
+
+// ---------- State ----------
+const state = {
+  mode: 'maze',           // 'maze' | 'hallway' | 'won'
+  px: 0.5, py: 0.5,
+  pAngle: 0,
+  // Animation
+  fromX: 0.5, fromY: 0.5, toX: 0.5, toY: 0.5,
+  fromAngle: 0, toAngle: 0,
+  animStart: 0, animDur: 0, animType: null, // 'move' | 'turn' | null
+  // Hallway
+  hallwayLen: 0,
+  hallwayReturnHint: { x: 0, y: 0 },
+  // Music
+  musicPos: 0,
+  // Hidden timer
+  gameStart: 0,
+  // Tile cache (sparse, keyed by "x,y")
+  tileCache: new Map(),
+  // Hallway tile cache (cleared on each new hallway)
+  hallwayTiles: null,
+  // Input
+  keys: new Set(),
+  ready: true,
+};
+
+// ---------- Seeded RNG ----------
+// Mulberry32 — small, fast, repeatable.
+function rngFor(seed) {
+  let s = seed | 0;
+  return function() {
+    s = (s + 0x6D2B79F5) | 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function tileSeed(x, y) {
+  // Cantor pairing-ish hash on (x+offset, y+offset) so negative coords work.
+  const a = (x + 100003) | 0;
+  const b = (y + 100019) | 0;
+  return Math.imul(a, 2654435761) ^ Math.imul(b, 1597334677);
+}
+
+// ---------- Maze tile lookup ----------
+function getTile(x, y) {
+  const key = x + ',' + y;
+  let t = state.tileCache.get(key);
+  if (t !== undefined) return t;
+  t = generateTile(x, y);
+  state.tileCache.set(key, t);
+  return t;
+}
+
+function generateTile(x, y) {
+  // Corridor cells: always floor.
+  if ((x & 1) === 0 && (y & 1) === 0) return TILE_FLOOR;
+  // Pillar cells: always wall.
+  if ((x & 1) === 1 && (y & 1) === 1) return TILE_WALL;
+
+  // Passage cell — between two corridor cells.
+  const rng = rngFor(tileSeed(x, y));
+  const r1 = rng();
+  if (r1 < PASSAGE_OPEN_CHANCE) return TILE_FLOOR;
+
+  // Wall. Maybe a door.
+  const r2 = rng();
+  if (r2 < BROWN_DOOR_CHANCE / (1 - PASSAGE_OPEN_CHANCE)) return TILE_DOOR_BROWN;
+
+  // After the 10-min mark, NEW walls get a chance to be a green door (exit).
+  if (Date.now() - state.gameStart >= GREEN_DOOR_AFTER_MS) {
+    const r3 = rng();
+    if (r3 < GREEN_DOOR_CHANCE) return TILE_DOOR_GREEN;
+  }
+
+  return TILE_WALL;
+}
+
+// ---------- Hallway tile lookup ----------
+// Hallway is a 1-wide corridor along +x. Player at (0.5, 0.5),
+// facing east. Walks to (length-0.5, 0.5).
+function getHallwayTile(x, y) {
+  const len = state.hallwayLen;
+  if (y === 0 && x >= 0 && x < len) return TILE_FLOOR;
+  return TILE_WALL;
+}
+
+function tileAt(x, y) {
+  if (state.mode === 'hallway') return getHallwayTile(x, y);
+  return getTile(x, y);
+}
+
+function isWall(t) {
+  return t === TILE_WALL || t === TILE_DOOR_BROWN || t === TILE_DOOR_GREEN;
+}
+function isDoor(t) {
+  return t === TILE_DOOR_BROWN || t === TILE_DOOR_GREEN;
+}
+
+// ---------- Raycaster ----------
+// Standard Wolfenstein-style DDA; returns first wall hit info
+// or null if no hit within max distance.
+function castRay(angle, maxDist) {
+  const cosA = Math.cos(angle);
+  const sinA = Math.sin(angle);
+
+  let mapX = Math.floor(state.px);
+  let mapY = Math.floor(state.py);
+
+  const deltaDistX = cosA === 0 ? 1e30 : Math.abs(1 / cosA);
+  const deltaDistY = sinA === 0 ? 1e30 : Math.abs(1 / sinA);
+
+  let stepX, sideDistX, stepY, sideDistY;
+  if (cosA < 0) {
+    stepX = -1;
+    sideDistX = (state.px - mapX) * deltaDistX;
+  } else {
+    stepX = 1;
+    sideDistX = (mapX + 1.0 - state.px) * deltaDistX;
+  }
+  if (sinA < 0) {
+    stepY = -1;
+    sideDistY = (state.py - mapY) * deltaDistY;
+  } else {
+    stepY = 1;
+    sideDistY = (mapY + 1.0 - state.py) * deltaDistY;
+  }
+
+  let side = 0;
+  for (let i = 0; i < 256; i++) {
+    if (sideDistX < sideDistY) {
+      sideDistX += deltaDistX;
+      mapX += stepX;
+      side = 0;
+    } else {
+      sideDistY += deltaDistY;
+      mapY += stepY;
+      side = 1;
+    }
+    const t = tileAt(mapX, mapY);
+    if (isWall(t)) {
+      const perpDist = side === 0
+        ? (sideDistX - deltaDistX)
+        : (sideDistY - deltaDistY);
+      if (perpDist > maxDist) return null;
+      return { dist: perpDist, side, tile: t, mapX, mapY };
+    }
+    if (Math.min(sideDistX, sideDistY) > maxDist) return null;
+  }
+  return null;
+}
+
+// ---------- Render ----------
+function colorForTile(tile) {
+  switch (tile) {
+    case TILE_DOOR_BROWN: return [107, 68, 35];
+    case TILE_DOOR_GREEN: return [40, 200, 80];
+    default:              return [240, 200, 40]; // bright yellow walls
+  }
+}
+
+function render() {
+  // Sky / floor
+  if (state.mode === 'hallway') {
+    ctx.fillStyle = '#0a0a08';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  } else {
+    // Ceiling — dim brown
+    ctx.fillStyle = '#3a2820';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H / 2);
+    // Floor — beige carpet
+    ctx.fillStyle = '#5a4838';
+    ctx.fillRect(0, CANVAS_H / 2, CANVAS_W, CANVAS_H / 2);
+  }
+
+  const maxDist = state.mode === 'hallway' ? RENDER_DIST_HALLWAY : RENDER_DIST_MAZE;
+  const fadeStart = state.mode === 'hallway' ? 0.4 : 6;
+  const colW = CANVAS_W / NUM_RAYS;
+
+  for (let i = 0; i < NUM_RAYS; i++) {
+    const cameraX = (i / NUM_RAYS) * 2 - 1; // -1 .. 1
+    const rayAngle = state.pAngle + Math.atan(cameraX * Math.tan(FOV / 2));
+    const hit = castRay(rayAngle, maxDist);
+    if (!hit) continue;
+
+    // Fish-eye correction
+    const corrected = hit.dist * Math.cos(rayAngle - state.pAngle);
+    if (corrected <= 0.01) continue;
+
+    const wallH = Math.min(CANVAS_H, CANVAS_H / corrected);
+    const wallTop = (CANVAS_H - wallH) / 2;
+
+    let [r, g, b] = colorForTile(hit.tile);
+
+    // Side darkening for depth
+    if (hit.side === 1) { r *= 0.78; g *= 0.78; b *= 0.78; }
+
+    // Distance shading
+    let lit = 1;
+    if (state.mode === 'hallway') {
+      lit = Math.max(0, 1 - corrected / RENDER_DIST_HALLWAY);
+      lit = Math.pow(lit, 1.4);
+    } else if (corrected > fadeStart) {
+      lit = Math.max(0.35, 1 - (corrected - fadeStart) / (RENDER_DIST_MAZE - fadeStart) * 0.65);
+    }
+    r = (r * lit) | 0;
+    g = (g * lit) | 0;
+    b = (b * lit) | 0;
+
+    ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+    ctx.fillRect(i * colW, wallTop, Math.ceil(colW) + 1, wallH);
+  }
+
+  // Hallway vignette (extra darkness around edges)
+  if (state.mode === 'hallway') {
+    const grad = ctx.createRadialGradient(
+      CANVAS_W / 2, CANVAS_H / 2, 60,
+      CANVAS_W / 2, CANVAS_H / 2, CANVAS_W * 0.6,
+    );
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.85)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  }
+}
+
+// ---------- Movement / animation ----------
+function isInputBlocked() {
+  return state.mode === 'won' || state.animType !== null;
+}
+
+function startMoveAnim(toX, toY) {
+  state.animType  = 'move';
+  state.animStart = performance.now();
+  state.animDur   = STEP_ANIM_MS;
+  state.fromX = state.px; state.fromY = state.py;
+  state.toX = toX;        state.toY = toY;
+}
+
+function startTurnAnim(toAngle) {
+  state.animType  = 'turn';
+  state.animStart = performance.now();
+  state.animDur   = TURN_ANIM_MS;
+  state.fromAngle = state.pAngle;
+  state.toAngle   = toAngle;
+}
+
+function tickAnim(now) {
+  if (!state.animType) return;
+  const t = Math.min(1, (now - state.animStart) / state.animDur);
+  // Ease in-out
+  const e = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+  if (state.animType === 'move') {
+    state.px = state.fromX + (state.toX - state.fromX) * e;
+    state.py = state.fromY + (state.toY - state.fromY) * e;
+  } else if (state.animType === 'turn') {
+    state.pAngle = state.fromAngle + (state.toAngle - state.fromAngle) * e;
+  }
+  if (t >= 1) {
+    if (state.animType === 'move') {
+      state.px = state.toX; state.py = state.toY;
+      onStepComplete();
+    } else {
+      state.pAngle = normalizeAngle(state.toAngle);
+    }
+    state.animType = null;
+  }
+}
+
+function normalizeAngle(a) {
+  const TWO_PI = Math.PI * 2;
+  while (a < 0) a += TWO_PI;
+  while (a >= TWO_PI) a -= TWO_PI;
+  return a;
+}
+
+function onStepComplete() {
+  // After arriving on a tile, check for hallway exit.
+  if (state.mode === 'hallway') {
+    const cellX = Math.floor(state.px);
+    if (cellX >= state.hallwayLen - 1) {
+      exitHallway();
+    }
+  }
+}
+
+// ---------- Input handling ----------
+// Snap player angle to nearest cardinal direction (0, PI/2, PI, 3PI/2).
+function snappedDir() {
+  const TWO_PI = Math.PI * 2;
+  const a = normalizeAngle(state.pAngle);
+  // Round to nearest quarter
+  const q = Math.round(a / (Math.PI / 2)) % 4;
+  return q;
+}
+
+// Returns [dx, dy] for the cardinal direction the player is facing.
+function dirVec(forward) {
+  const q = snappedDir();
+  const sign = forward ? 1 : -1;
+  switch (q) {
+    case 0: return [ sign,  0]; // east
+    case 1: return [ 0,  sign]; // south
+    case 2: return [-sign,  0]; // west
+    case 3: return [ 0, -sign]; // north
+  }
+  return [0, 0];
+}
+
+function tryStep(forward) {
+  if (isInputBlocked()) return;
+
+  const [dx, dy] = dirVec(forward);
+  const cellX = Math.round(state.px - 0.5);
+  const cellY = Math.round(state.py - 0.5);
+  const nx = cellX + dx;
+  const ny = cellY + dy;
+
+  const t = tileAt(nx, ny);
+
+  // Door interactions only when walking forward.
+  if (forward) {
+    if (t === TILE_DOOR_BROWN) { enterHallway(cellX, cellY); return; }
+    if (t === TILE_DOOR_GREEN) { winGame(); return; }
+  }
+
+  // Solid wall — bump (no animation, just no-op).
+  if (isWall(t)) return;
+
+  startMoveAnim(nx + 0.5, ny + 0.5);
+}
+
+function tryTurn(left) {
+  if (isInputBlocked()) return;
+  const delta = left ? -Math.PI / 2 : Math.PI / 2;
+  // Animate to target absolute angle (don't normalize until done, so
+  // the easing rotates the short way).
+  const cur = state.pAngle;
+  startTurnAnim(cur + delta);
+}
+
+// ---------- Hallway transitions ----------
+function enterHallway(returnX, returnY) {
+  state.hallwayReturnHint.x = returnX;
+  state.hallwayReturnHint.y = returnY;
+  state.hallwayLen = HALLWAY_LEN_MIN
+                  + Math.floor(Math.random() * (HALLWAY_LEN_MAX - HALLWAY_LEN_MIN + 1));
+  state.mode = 'hallway';
+  state.px = 0.5;
+  state.py = 0.5;
+  state.pAngle = 0; // east
+  state.animType = null;
+  // Pause music, save position so we can resume on exit.
+  state.musicPos = bgm.currentTime || 0;
+  try { bgm.pause(); } catch (e) {}
+}
+
+function exitHallway() {
+  // Drop the player into a fresh area of the maze: a few corridor
+  // cells away from where they entered, in a random cardinal
+  // direction. This procedurally extends exploration.
+  const dirs = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+  const [dx, dy] = dirs[Math.floor(Math.random() * 4)];
+  const dist = 4 + Math.floor(Math.random() * 5); // 4-8 corridor cells away
+  let nx = state.hallwayReturnHint.x + dx * dist * 2;
+  let ny = state.hallwayReturnHint.y + dy * dist * 2;
+  // Snap to corridor cells (even, even)
+  nx -= (nx & 1);
+  ny -= (ny & 1);
+
+  state.mode = 'maze';
+  state.px = nx + 0.5;
+  state.py = ny + 0.5;
+  // Face a random cardinal direction
+  state.pAngle = (Math.floor(Math.random() * 4)) * (Math.PI / 2);
+  state.animType = null;
+
+  // Resume music from where it left off.
+  try {
+    bgm.currentTime = state.musicPos;
+    const p = bgm.play();
+    if (p && p.catch) p.catch(() => {});
+  } catch (e) {}
+}
+
+// ---------- Win ----------
+function winGame() {
+  state.mode = 'won';
+  try { bgm.pause(); } catch (e) {}
+  gameArea.classList.remove('visible');
+  winScreen.classList.add('visible');
+}
+
+// ---------- Game loop ----------
+let rafId = null;
+function loop(now) {
+  tickAnim(now);
+  // Hold-to-repeat: if no animation in progress and a movement key
+  // is held, queue the next step automatically.
+  if (!state.animType && state.mode !== 'won') {
+    if (state.keys.has('ArrowUp'))    tryStep(true);
+    else if (state.keys.has('ArrowDown'))  tryStep(false);
+    else if (state.keys.has('ArrowLeft'))  tryTurn(true);
+    else if (state.keys.has('ArrowRight')) tryTurn(false);
+  }
+  render();
+  rafId = requestAnimationFrame(loop);
+}
+
+// ---------- Boot ----------
+function startGame() {
+  splash.style.display = 'none';
+  gameArea.classList.add('visible');
+  state.gameStart = Date.now();
+  // Player starts at corridor cell (0,0).
+  state.px = 0.5;
+  state.py = 0.5;
+  state.pAngle = 0;
+  state.tileCache.clear();
+  state.mode = 'maze';
+
+  // Best-effort music start; ignore failure.
+  bgm.volume = 0.45;
+  bgm.currentTime = 0;
+  bgm.play().catch(() => {});
+
+  if (rafId) cancelAnimationFrame(rafId);
+  rafId = requestAnimationFrame(loop);
+  canvas.focus();
+}
+
+startBtn.addEventListener('click', startGame);
+
+window.addEventListener('keydown', (e) => {
+  if (state.mode === 'won') return;
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
+    e.preventDefault();
+    state.keys.add(e.key);
+  }
+});
+window.addEventListener('keyup', (e) => {
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
+    state.keys.delete(e.key);
+  }
+});
+window.addEventListener('blur', () => state.keys.clear());
+</script>
+
+</body>
+</html>
