@@ -247,9 +247,12 @@ canvas {
 //
 // Maze structure (deterministic, per-tile, lazy):
 //   - tile (x, y) where x even, y even  → corridor (always floor)
-//   - tile (x, y) where x odd,  y odd   → wall pillar (always wall)
+//   - tile (x, y) where x odd,  y odd   → wall pillar (80%) or open
+//                                          floor (20%); openings
+//                                          fuse adjacent passages
+//                                          into wide liminal pockets.
 //   - tile (x, y) mixed odd/even        → passage candidate;
-//       60% open, 35% wall, 5% brown door.
+//       80% open, 15% wall, 5% brown door.
 //       After the 10-min mark, *newly generated* walls have a
 //       25% chance to be a green door (the exit) instead.
 //
@@ -257,6 +260,11 @@ canvas {
 //   tiles already explored before the 10-min mark stay as they
 //   were — only NEW walls (newly generated after 10 min) get
 //   the green-door roll.
+//
+//   Spawn safety: when the player drops into a fresh corridor
+//   (game start, hallway exit) the four neighbouring passages
+//   are checked, and one is force-opened if all four happened
+//   to roll as walls — guarantees a way forward from spawn.
 //
 // Hallways are a separate, transient world: a 1-tile-wide
 // straight corridor of length 15-30. Music pauses on entry and
@@ -270,7 +278,10 @@ const CANVAS_H = 400;
 const NUM_RAYS = 200;
 const FOV = Math.PI / 3; // 60°
 const RENDER_DIST_MAZE = 14;
-const RENDER_DIST_HALLWAY = 2.6;
+// Slightly extended hallway visibility so the periodic side alcoves
+// resolve before the player walks into them — keeps the eerie close
+// fog while letting the player perceive forward motion.
+const RENDER_DIST_HALLWAY = 3.5;
 
 const TILE_FLOOR       = 0;
 const TILE_WALL        = 1;
@@ -286,7 +297,14 @@ const HALLWAY_LEN_MAX = 30;
 const GREEN_DOOR_AFTER_MS = 10 * 60 * 1000; // 10 minutes (hidden)
 const GREEN_DOOR_CHANCE   = 0.25;
 const BROWN_DOOR_CHANCE   = 0.05;
-const PASSAGE_OPEN_CHANCE = 0.60;
+// Passage open chance — bumped from 0.60 to 0.80 so the maze reads
+// as a column hall rather than a grid of corridors. Walls become
+// rare punctuation; sealed corridors are now ~0.04% probability.
+const PASSAGE_OPEN_CHANCE = 0.80;
+// Pillar (odd, odd) cells are normally always wall. Open a fraction
+// of them so the floor occasionally extends into the column grid,
+// producing wide liminal pockets between rows of pillars.
+const PILLAR_OPEN_CHANCE  = 0.20;
 
 // ---------- DOM ----------
 const splash    = document.getElementById('splash');
@@ -355,8 +373,14 @@ function getTile(x, y) {
 function generateTile(x, y) {
   // Corridor cells: always floor.
   if ((x & 1) === 0 && (y & 1) === 0) return TILE_FLOOR;
-  // Pillar cells: always wall.
-  if ((x & 1) === 1 && (y & 1) === 1) return TILE_WALL;
+  // Pillar cells: usually wall, occasionally open. An open pillar
+  // bridges adjacent passages into wider open zones, giving the
+  // maze a "column hall" feel instead of a strict grid.
+  if ((x & 1) === 1 && (y & 1) === 1) {
+    const rngP = rngFor(tileSeed(x, y) ^ 0x70696c6c);
+    if (rngP() < PILLAR_OPEN_CHANCE) return TILE_FLOOR;
+    return TILE_WALL;
+  }
 
   // Passage cell — between two corridor cells.
   const rng = rngFor(tileSeed(x, y));
@@ -376,12 +400,49 @@ function generateTile(x, y) {
   return TILE_WALL;
 }
 
+// Spawn-safety helper. A corridor cell can land surrounded by walls
+// on all four passage sides if the random rolls are unlucky. When
+// we drop the player into a fresh corridor, we walk its four
+// neighbours and force one open if every passage is a hard wall.
+// Doors count as "openings" because they're interactable forward
+// progress (brown enters a hallway, green wins).
+function ensureCorridorEscape(cx, cy) {
+  const passages = [
+    { x: cx,     y: cy - 1 }, // north
+    { x: cx + 1, y: cy     }, // east
+    { x: cx,     y: cy + 1 }, // south
+    { x: cx - 1, y: cy     }, // west
+  ];
+  let escapeCount = 0;
+  for (const p of passages) {
+    const t = getTile(p.x, p.y);
+    if (t !== TILE_WALL) escapeCount++;
+  }
+  if (escapeCount > 0) return;
+  // All four sides are walls — pick one and carve it open.
+  const pick = passages[Math.floor(Math.random() * passages.length)];
+  state.tileCache.set(pick.x + ',' + pick.y, TILE_FLOOR);
+}
+
 // ---------- Hallway tile lookup ----------
 // Hallway is a 1-wide corridor along +x. Player at (0.5, 0.5),
 // facing east. Walks to (length-0.5, 0.5).
+//
+// The walls are pierced periodically by 1-tile-deep alcoves on
+// alternating sides. The recesses give parallax cues as the player
+// walks past — without them, the side walls are uniform tunnels and
+// the player can't tell they're moving forward.
 function getHallwayTile(x, y) {
   const len = state.hallwayLen;
   if (y === 0 && x >= 0 && x < len) return TILE_FLOOR;
+  // Side alcoves — alternate between north (y = -1) and south
+  // (y = +1) every few tiles. Skip the very first and very last
+  // tiles so entry/exit feel solidly enclosed.
+  if (x >= 2 && x < len - 1) {
+    const i = x - 2;
+    if (y === -1 && (i % 6) === 0) return TILE_FLOOR;
+    if (y ===  1 && (i % 6) === 3) return TILE_FLOOR;
+  }
   return TILE_WALL;
 }
 
@@ -669,6 +730,9 @@ function exitHallway() {
   ny -= (ny & 1);
 
   state.mode = 'maze';
+  // Guarantee a way forward from the spawn corridor — never drop
+  // the player into a sealed 1×1 box.
+  ensureCorridorEscape(nx, ny);
   state.px = nx + 0.5;
   state.py = ny + 0.5;
   // Face a random cardinal direction
@@ -718,6 +782,9 @@ function startGame() {
   state.pAngle = 0;
   state.tileCache.clear();
   state.mode = 'maze';
+  // Even the starting corridor is procedurally generated, so the
+  // unlucky-roll seal could in theory happen here too.
+  ensureCorridorEscape(0, 0);
 
   // Best-effort music start; ignore failure.
   bgm.volume = 0.45;
