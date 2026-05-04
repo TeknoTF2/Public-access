@@ -114,8 +114,7 @@ canvas {
     <canvas id="game" width="640" height="480"></canvas>
   </div>
   <div class="hint">
-    &uarr;&darr;&larr;&rarr; move &nbsp;&middot;&nbsp; SPACE pause/advance &nbsp;&middot;&nbsp; ESC pause<br>
-    <span style="color:#666;">DEBUG: 1=red &middot; 2=blue &middot; 3=purple &middot; 4=green</span>
+    &uarr;&darr;&larr;&rarr; move &nbsp;&middot;&nbsp; SPACE pause/advance &nbsp;&middot;&nbsp; ESC pause
   </div>
 </div>
 
@@ -232,7 +231,7 @@ const boss = {
   x: CANVAS_W / 2,
   y: BOSS_ZONE.y + BOSS_ZONE.h / 2,
   vx: BOSS_SWEEP_SPEED,
-  hp: 200, maxHp: 200,          // tunable; sized so Phase 1 plays through several attacks before Acid Rain
+  hp: 600, maxHp: 600,          // sized so each phase plays through
   invincible: true,             // until intro cutscene ends
   flashTimer: 0,                // visual feedback on hit
 };
@@ -653,7 +652,6 @@ window.addEventListener('keydown', (e) => {
   const interesting = [
     'ArrowUp','ArrowDown','ArrowLeft','ArrowRight',
     ' ','Enter','Escape',
-    '1','2','3','4',
   ];
   if (interesting.includes(e.key)) e.preventDefault();
 
@@ -674,14 +672,6 @@ window.addEventListener('keydown', (e) => {
       return;
     }
     return;
-  }
-
-  // Debug state hot-keys (will be replaced by attack-pattern triggers).
-  if (!game.paused && !cutscene.active && !game.over && !game.victory) {
-    if (e.key === '1') setState(S_RED);
-    if (e.key === '2') setState(S_BLUE);
-    if (e.key === '3') setState(S_PURPLE);
-    if (e.key === '4') setState(S_GREEN);
   }
 
   keys.add(e.key);
@@ -3784,7 +3774,20 @@ function checkCollisions() {
         boss.flashTimer = 0.08;
         if (boss.hp <= 0) {
           boss.hp = 0;
-          if (game.phase === 2) {
+          if (game.phase === 1) {
+            // Player melted Phase 1 before the HP-threshold check
+            // could trigger — route into Phase 1 → 2 anyway.
+            game.phase = 1.5;
+            enemyBullets.length = 0;
+            boss.hp = 1;
+            playCutscene(getPhase1To2(), () => {
+              startPhase(2);
+              resetBossAI();
+              setState(S_RED);
+              bossAI.soul = 'red';
+              bossAI.soulNamedShown.red = true;
+            });
+          } else if (game.phase === 2) {
             // Phase 2 ends here — the final auto-fire hit triggers
             // the Phase 2 → 3 cutscene rather than defeat.
             game.phase = 2.5;
@@ -3798,11 +3801,7 @@ function checkCollisions() {
             // Phase 3 boss death — theatrical defeat with reboot.
             startDefeatSequence();
           } else {
-            // Fallback (Phase 1 won't actually reach here).
-            playCutscene(getDefeatLines(), () => {
-              stopAllMusic();
-              game.victory = true;
-            });
+            // Mid-transition (1.5 / 2.5) — let the cutscene complete.
           }
         }
       }
