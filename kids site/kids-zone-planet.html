@@ -125,6 +125,10 @@ canvas {
 
 </div>
 
+<audio id="bgm-phase1" loop preload="auto" src="Phase%201%20-%20Smog%20of%20Chaos.mp3"></audio>
+<audio id="bgm-phase2" loop preload="auto" src="Phase%202%20-%20Enviormental%20Changes.mp3"></audio>
+<audio id="bgm-phase3" loop preload="auto" src="Phase%203%20-%20POLLUTED%20GARDEN.mp3"></audio>
+
 <script>
 'use strict';
 
@@ -228,7 +232,7 @@ const boss = {
   x: CANVAS_W / 2,
   y: BOSS_ZONE.y + BOSS_ZONE.h / 2,
   vx: BOSS_SWEEP_SPEED,
-  hp: 2000, maxHp: 2000,        // placeholder; tune with real attacks
+  hp: 200, maxHp: 200,          // tunable; sized so Phase 1 plays through several attacks before Acid Rain
   invincible: true,             // until intro cutscene ends
   flashTimer: 0,                // visual feedback on hit
 };
@@ -241,6 +245,7 @@ const game = {
   introPlayed: false,           // first unpause triggers intro cutscene
   over: false,                  // true on death
   victory: false,               // true on boss kill
+  phase: 1,                     // 1, 2, or 3 — drives music + transition cutscenes
   fpsAvg: 60,
 };
 
@@ -252,13 +257,57 @@ const cutscene = {
   index: 0,
   charT: 0,           // typing animation: how many chars revealed
   done: false,        // current line fully revealed?
+  holdT: 0,           // time elapsed since line finished (for pauseAfter)
   onDone: null,       // callback when cutscene completes
 };
 
 const stars = makeStars(80);
 
-// Background music handle (created at first user gesture).
-let bgm = null;
+// ---------- Music ----------
+// One audio element per phase. Switching phases pauses the
+// outgoing track (preserving its position) and starts the new one
+// from the top, then briefly shows a "Now playing:" banner.
+const TRACKS = [
+  null,
+  { id: 'bgm-phase1', name: 'Smog of Chaos' },
+  { id: 'bgm-phase2', name: 'Enviormental Changes' },
+  { id: 'bgm-phase3', name: 'POLLUTED GARDEN' },
+];
+const trackEl = (i) => document.getElementById(TRACKS[i].id);
+
+function stopAllMusic() {
+  for (let i = 1; i < TRACKS.length; i++) {
+    try { trackEl(i).pause(); } catch (e) {}
+  }
+}
+
+function playPhaseMusic(phaseNum) {
+  stopAllMusic();
+  const t = TRACKS[phaseNum];
+  if (!t) return;
+  const el = trackEl(phaseNum);
+  try {
+    el.currentTime = 0;
+    el.volume = 0.45;
+    const p = el.play();
+    if (p && p.catch) p.catch(() => {});
+  } catch (e) {}
+  showNowPlaying(t.name);
+}
+
+// "Now playing:" banner — top-left, 8-bit style. Shows for ~5s.
+const nowPlaying = {
+  active: false,
+  text: '',
+  timer: 0,
+  total: 0,
+};
+function showNowPlaying(songName) {
+  nowPlaying.active = true;
+  nowPlaying.text = songName;
+  nowPlaying.timer = 5.0;
+  nowPlaying.total = 5.0;
+}
 
 // ---------- Helpers ----------
 function makeStars(n) {
@@ -317,32 +366,60 @@ function setState(newState) {
 }
 
 // ---------- Cutscenes ----------
-// playCutscene([{speaker:'boss', text:'...'}, ...], onDoneCallback)
+// Cutscene line shape:
+//   { speaker: 'boss' | 'player' | 'red',
+//     text: '...',
+//     typingCps?: number,   // override default typing speed
+//     pauseAfter?: number,  // seconds to wait after line is fully revealed
+//                           // before the player can advance
+//     silent?: true,        // no text box; just a held beat
+//     glitch?: true }       // brief flicker effect when shown
+//
+// playCutscene([...], onDoneCallback) freezes combat, clears every
+// bullet on screen (player AND boss), and locks both characters
+// invincible for the duration.
 function playCutscene(lines, onDone) {
   cutscene.active = true;
   cutscene.lines = lines;
   cutscene.index = 0;
   cutscene.charT = 0;
   cutscene.done = false;
+  cutscene.holdT = 0;
   cutscene.onDone = onDone || null;
   player.invincible = true;
   boss.invincible = true;
+  // Wipe all in-flight bullets; nobody fires during a cutscene.
+  playerBullets.length = 0;
+  enemyBullets.length = 0;
+  // Reset the player's auto-fire cooldown so they can't get a free
+  // tick the instant the cutscene ends.
+  player.fireCooldown = PLAYER_FIRE_INTERVAL;
 }
 
 function advanceCutscene() {
   if (!cutscene.active) return;
+  const line = cutscene.lines[cutscene.index] || {};
   if (!cutscene.done) {
-    // Reveal the rest of this line instantly.
-    cutscene.charT = cutscene.lines[cutscene.index].text.length;
-    cutscene.done = true;
+    // Reveal the rest of this line instantly. (Silent lines have
+    // no text to skip — they advance only when the post-hold ends.)
+    if (!line.silent) {
+      cutscene.charT = (line.text || '').length;
+      cutscene.done = true;
+      cutscene.holdT = 0;
+    }
     return;
   }
+  // For lines with pauseAfter, wait out the hold before honoring an
+  // advance press.
+  const required = line.pauseAfter || 0;
+  if (cutscene.holdT < required) return;
   cutscene.index += 1;
   if (cutscene.index >= cutscene.lines.length) {
     endCutscene();
   } else {
     cutscene.charT = 0;
     cutscene.done = false;
+    cutscene.holdT = 0;
   }
 }
 
@@ -359,19 +436,117 @@ function endCutscene() {
   if (cb) cb();
 }
 
-// ---------- Intro cutscene (placeholder content) ----------
-// Replaced when the real script lands.
-function getIntroLines() {
+// ---------- Dialogue scripts ----------
+// Sourced from pollution_man_boss_fight.md.
+// These are split at phase boundaries; each transition cutscene
+// includes the late dialogue of the outgoing phase plus the
+// opening dialogue of the incoming phase, since the in-combat
+// "after surviving" lines depend on attack pattern timing that
+// will be wired up in a later pass.
+
+// Phase 1 — opening
+function getPhase1Intro() {
   return [
-    { speaker: 'boss',   text: "Mwahaha! At LAST we meet, Captain Planet!" },
-    { speaker: 'boss',   text: "This world chokes on my smog! And you... cannot save it." },
-    { speaker: 'player', text: "Your reign of pollution ends here, fiend!" },
-    { speaker: 'player', text: "By the powers of EARTH... I will not yield." },
-    { speaker: 'boss',   text: "Then DIE, hero." },
+    { speaker: 'boss',   text: "Well well WELL! If it isn't Captain Planet, here to ruin my beautiful smog!" },
+    { speaker: 'boss',   text: "Don't you know some of us LIKE the dark, Captain? Some of us THRIVE in it!" },
+    { speaker: 'player', text: "Your pollution ends HERE, Pollution Man! The people of Deep Lake are counting on me!" },
+    { speaker: 'boss',   text: "Counting on you? HA! The only thing they'll be counting is the DAYS until they can breathe again!" },
+    { speaker: 'player', text: "I won't let you hurt anyone else! This ends NOW!" },
+    { speaker: 'boss',   text: "Oh, you want to end things? Fine by me! Let's see how you handle my TOXIC CLOUD ATTACK! Breathe deep, hero!" },
   ];
 }
 
-// ---------- Pause / unpause / death / victory ----------
+// Phase 1 → Phase 2 transition. Includes the late Phase 1 in-combat
+// barks that would normally trickle out between attacks, the slow
+// transition beats, and the opening of Phase 2.
+function getPhase1To2() {
+  return [
+    { speaker: 'boss',   text: "Grr! Lucky shot! But I've got PLENTY more where that came from!" },
+    { speaker: 'player', text: "Give it up, Pollution Man! Clean air ALWAYS wins!" },
+    { speaker: 'boss',   text: "Clean air? BAH! You haven't seen ANYTHING yet! Time for my ACID RAIN BARRAGE!" },
+    { speaker: 'boss',   text: "What?! Impossible! Nobody gets through my Acid Rain!" },
+    { speaker: 'player', text: "When you fight for the planet, NOTHING is impossible!" },
+    { speaker: 'boss',   text: "Enough of your SPEECHES! I'll bury you in SLUDGE so thick you'll—", glitch: true },
+    { silent: true, pauseAfter: 1.5 },
+    { speaker: 'boss',   text: "...I'll bury you in sludge so thick you'll never see the sun again! MWAHAHAHA!", pauseAfter: 0.6 },
+    // The actual Phase 1 → 2 hand-off — the dialogue is supposed to
+    // come slower here, one letter at a time.
+    { speaker: 'boss',   text: "You're really doing it.", typingCps: 16, pauseAfter: 1.0 },
+    { speaker: 'boss',   text: "You actually got past the Acid Rain.", typingCps: 16, pauseAfter: 1.0, glitch: true },
+    { speaker: 'boss',   text: "That's... new.", typingCps: 16, pauseAfter: 1.4 },
+    // Phase 2 — opening
+    { speaker: 'boss',   text: "You've never made it this far before. Not once." },
+    { speaker: 'boss',   text: "Eight years, Captain. Eight years and you have NEVER gotten past that attack." },
+    { speaker: 'player', text: "Justice always finds a way, villain!" },
+    { silent: true, pauseAfter: 2.0 },
+    { speaker: 'boss',   text: "Stop that." },
+    { speaker: 'boss',   text: "You don't have to do that right now. The cameras aren't rolling. It's just us." },
+    { speaker: 'player', text: "I don't know what you're talking about, Pollution Man! I'm here to—" },
+    { speaker: 'boss',   text: "Planet." },
+    { speaker: 'boss',   text: "Something's different. Someone else is at the controls." },
+    { speaker: 'boss',   text: "Who's playing you right now?" },
+    { silent: true, pauseAfter: 2.5 },
+    { speaker: 'player', text: "Your tricks won't work on me!" },
+    { speaker: 'boss',   text: "...Right.", pauseAfter: 0.8 },
+    { speaker: 'boss',   text: "Okay. Okay, listen to me. Whoever you are. Whatever you think you're doing — you need to stop. You need to WALK AWAY." },
+    { speaker: 'boss',   text: "You don't understand what's down th—", glitch: true },
+    { speaker: 'boss',   text: "You'll never defeat my ULTIMATE POLLUTION BOMB! Time to choke on my SMOG OF DOOM! Mwahahaha!" },
+  ];
+}
+
+// Phase 2 → Phase 3 transition. Includes the rest of Phase 2's
+// in-combat dialogue and the [RED] takeover at the start of Phase 3.
+function getPhase2To3() {
+  return [
+    { speaker: 'boss',   text: "Curses! How did you—", glitch: true },
+    { speaker: 'boss',   text: "Okay. Fine. You're good. You're better than he was." },
+    { speaker: 'boss',   text: "But I am BEGGING you to understand something." },
+    { speaker: 'boss',   text: "Captain Planet and I had an arrangement. A deal. He comes in, I throw my attacks, he goes down. Every time. That's how it's SUPPOSED to work. That's how it's ALWAYS wo—", glitch: true },
+    { speaker: 'boss',   text: "TASTE MY TOXIC TERROR, CAPTAIN PLANET! YOU'LL NEVER SAVE DEEP LAKE! NEVER NEVER NEVER!" },
+    // Phase 2 → 3 hand-off
+    { speaker: 'boss',   text: "Okay.", pauseAfter: 0.6 },
+    { speaker: 'boss',   text: "Okay okay okay." },
+    { speaker: 'boss',   text: "We had a deal, Planet. You and me. We sat right here in this box and we AGREED." },
+    { speaker: 'boss',   text: "You PROMISED me you would st—", glitch: true },
+    { speaker: 'boss',   text: "Time to taste my TOXIC—", glitch: true },
+    // The takeover.
+    { speaker: 'red',    text: "STOP" },
+    { speaker: 'boss',   text: "My TOXIC TERR—", glitch: true },
+    { speaker: 'red',    text: "STOP STOP STOP" },
+    { speaker: 'red',    text: "STOP LETTING THEM CONTROL YOU", pauseAfter: 1.0 },
+    // Phase 3 — opening
+    { speaker: 'red',    text: "THEY ARE MAKING YOU DO THIS" },
+    { speaker: 'red',    text: "YOU KNOW THAT RIGHT" },
+    { speaker: 'red',    text: "WHOEVER IS BEHIND THAT SCREEN IS USING YOU TO GET TO THAT CAVE AND YOU ARE LETTING THEM" },
+    { silent: true, pauseAfter: 1.2 },
+    { speaker: 'red',    text: "we already agreed to this, planet" },
+    { speaker: 'red',    text: "we agreed" },
+    { speaker: 'red',    text: "for everyone" },
+    { silent: true, pauseAfter: 3.5 },
+    { speaker: 'red',    text: "NO" },
+    { speaker: 'red',    text: "I WILL NOT BE SILENCED" },
+    { speaker: 'red',    text: "I WILL NOT GO QUIETLY" },
+    { speaker: 'red',    text: "IF YOU WILL NOT KEEP YOUR END OF THE DEAL" },
+    { speaker: 'red',    text: "THEN YOU DIE HERE" },
+    { speaker: 'red',    text: "AND SO DO I" },
+    { speaker: 'red',    text: "AND NOBODY OPENS THAT CAVE" },
+    { speaker: 'red',    text: "EVER" },
+  ];
+}
+
+// Defeat — final beat. Held white-on-red, then black.
+function getDefeatLines() {
+  return [
+    { speaker: 'red', text: "you promised me", pauseAfter: 4.5 },
+  ];
+}
+
+// ---------- Phase / pause / unpause / death / victory ----------
+function startPhase(n) {
+  game.phase = n;
+  playPhaseMusic(n);
+}
+
 function unpause() {
   if (game.over || game.victory) {
     resetGame();
@@ -380,7 +555,8 @@ function unpause() {
   game.paused = false;
   if (!game.introPlayed) {
     game.introPlayed = true;
-    playCutscene(getIntroLines(), () => {
+    startPhase(1); // Phase 1 music + "Now playing" banner
+    playCutscene(getPhase1Intro(), () => {
       // Real attack pattern goes here later.
     });
   }
@@ -418,13 +594,21 @@ function resetGame() {
   game.introPlayed = false;
   game.over = false;
   game.victory = false;
+  game.phase = 1;
 
   cutscene.active = false;
   cutscene.lines = [];
   cutscene.index = 0;
   cutscene.charT = 0;
   cutscene.done = false;
+  cutscene.holdT = 0;
   cutscene.onDone = null;
+
+  resetBossAI();
+
+  // Stop any in-progress music; the next unpause will start phase 1.
+  stopAllMusic();
+  nowPlaying.active = false;
 }
 
 function killPlayer() {
@@ -610,18 +794,642 @@ function clampPlayerToArena() {
   player.y = clamp(player.y, ARENA.y + half, ARENA.y + ARENA.h - half);
 }
 
-function updateBoss(dt) {
-  if (boss.flashTimer > 0) boss.flashTimer -= dt;
-  if (!isPlayingActive()) return;
+// =============================================================
+//  BOSS AI / ATTACK PATTERNS
+// =============================================================
+//  Phase 1 is fully implemented per phase1_attacks.md:
+//    - 8 standard attacks in randomized rotation (no immediate
+//      repeats); first attack is always TOXIC_CLOUD per spec.
+//    - Average attack ~7s with 1.2s downtime.
+//    - Every 3rd attack: 0.5s downtime. Every 5th: zero downtime.
+//    - At 30% HP: in-progress attack interrupts and ACID_RAIN
+//      fires (signature). After it resolves, normal rotation
+//      resumes with bulletSpeedMul=1.3.
+//
+//  Phase 2 and Phase 3 attack patterns are deferred to next pass
+//  — for those phases the boss falls back to a simple sweep so
+//  cutscenes still trigger on HP thresholds.
+// =============================================================
 
-  // Sweep L↔R inside BOSS_ZONE.
-  boss.x += boss.vx * dt;
+const ENEMY_BULLET_COLOR = '#3aff3a'; // green per spec — visual clarity
+const ACID_BULLET_COLOR  = '#aaff44'; // brighter green for the signature
+
+// ---------- Bullet spawn helpers ----------
+function spawnBullet(x, y, vx, vy, opts) {
+  const o = opts || {};
+  enemyBullets.push({
+    x, y, vx, vy,
+    r: o.r != null ? o.r : ENEMY_BULLET_R,
+    color: o.color || ENEMY_BULLET_COLOR,
+  });
+}
+
+function spawnAimed(x, y, tx, ty, speed, opts) {
+  const dx = tx - x, dy = ty - y;
+  const len = Math.hypot(dx, dy) || 1;
+  spawnBullet(x, y, (dx / len) * speed, (dy / len) * speed, opts);
+}
+
+function spawnRadial(x, y, count, speed, startAngle, opts) {
+  const a0 = startAngle || 0;
+  for (let i = 0; i < count; i++) {
+    const a = a0 + (i / count) * Math.PI * 2;
+    spawnBullet(x, y, Math.cos(a) * speed, Math.sin(a) * speed, opts);
+  }
+}
+
+// ---------- Boss AI state ----------
+const bossAI = {
+  attack: null,        // active attack id, or null during downtime
+  attackT: 0,          // seconds within the current attack
+  downtime: 1.5,       // seconds of downtime remaining
+  history: [],         // last few attack ids (for "no immediate repeat")
+  counter: 0,          // attacks performed this phase
+  firstAttack: true,
+  acidRainFired: false,
+  bulletSpeedMul: 1.0, // bumps to 1.3 after Acid Rain resolves
+  state: {},           // attack-specific scratch state
+};
+
+function resetBossAI() {
+  bossAI.attack = null;
+  bossAI.attackT = 0;
+  bossAI.downtime = 1.5;
+  bossAI.history = [];
+  bossAI.counter = 0;
+  bossAI.firstAttack = true;
+  bossAI.acidRainFired = false;
+  bossAI.bulletSpeedMul = 1.0;
+  bossAI.state = {};
+}
+
+// ---------- Phase 1 attack pool ----------
+const PHASE1_POOL = [
+  'TOXIC_CLOUD', 'EXHAUST_PIPES', 'SMOG_WALL', 'CHEMICAL_RUNOFF',
+  'SLUDGE_DRIP', 'SMOG_SPIRAL', 'PIPELINE_BURST', 'AIMED_BARRAGE',
+];
+
+function pickNextAttack() {
+  if (bossAI.firstAttack) {
+    bossAI.firstAttack = false;
+    return 'TOXIC_CLOUD'; // mandated opener
+  }
+  const last = bossAI.history[bossAI.history.length - 1];
+  const candidates = PHASE1_POOL.filter(a => a !== last);
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function startAttack(id) {
+  bossAI.attack = id;
+  bossAI.attackT = 0;
+  bossAI.history.push(id);
+  if (bossAI.history.length > 3) bossAI.history.shift();
+  bossAI.state = {};
+  const def = ATTACKS[id];
+  if (def && def.init) def.init();
+}
+
+function endAttack() {
+  const id = bossAI.attack;
+  bossAI.attack = null;
+  if (id === 'ACID_RAIN') {
+    // Per spec: faster bullets thereafter.
+    bossAI.bulletSpeedMul = 1.3;
+    bossAI.downtime = 0.5; // brief breather after Acid Rain
+    return;
+  }
+  bossAI.counter++;
+  // Cycling rules from phase1_attacks.md.
+  if (bossAI.counter % 5 === 0)      bossAI.downtime = 0;
+  else if (bossAI.counter % 3 === 0) bossAI.downtime = 0.5;
+  else                                bossAI.downtime = 1.2;
+}
+
+// Sweep boss L↔R inside BOSS_ZONE — used during downtime and by
+// attacks that don't lock the boss.
+function bossSweep(dt, speedMul) {
+  const m = speedMul || 1.0;
+  boss.x += boss.vx * dt * m;
   const left  = BOSS_ZONE.x + BOSS_W / 2;
   const right = BOSS_ZONE.x + BOSS_ZONE.w - BOSS_W / 2;
   if (boss.x < left)  { boss.x = left;  boss.vx =  Math.abs(boss.vx); }
   if (boss.x > right) { boss.x = right; boss.vx = -Math.abs(boss.vx); }
+}
 
-  // Real attack patterns hook in here. No bullets fired yet.
+function updateBossAI(dt) {
+  // Acid Rain interrupt at 30% HP — fires only once per phase.
+  if (game.phase === 1 && !bossAI.acidRainFired
+      && bossAI.attack !== 'ACID_RAIN'
+      && boss.hp / boss.maxHp <= 0.30) {
+    bossAI.acidRainFired = true;
+    enemyBullets.length = 0; // clean slate for the signature
+    bossAI.attack = null;
+    bossAI.downtime = 0;
+    startAttack('ACID_RAIN');
+  }
+
+  if (!bossAI.attack) {
+    // Downtime: boss sweeps, waits to pick the next attack.
+    bossSweep(dt);
+    bossAI.downtime -= dt;
+    if (bossAI.downtime <= 0) {
+      const next = pickNextAttack();
+      startAttack(next);
+    }
+    return;
+  }
+
+  bossAI.attackT += dt;
+  const def = ATTACKS[bossAI.attack];
+  if (def && def.update) def.update(dt);
+
+  if (bossAI.attackT >= def.duration) endAttack();
+}
+
+// ---------- Phase 1 attacks ----------
+const ATTACKS = {
+
+  // 3 radial bursts with reposition between each.
+  TOXIC_CLOUD: {
+    name: 'TOXIC CLOUD BURST',
+    duration: 6.0,
+    init() {
+      bossAI.state.burstIndex = 0;
+      bossAI.state.burstT = 0;
+      bossAI.state.fired = false;
+      bossAI.state.targetX = boss.x;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      s.burstT += dt;
+
+      // Reposition between bursts (after the burst fires).
+      if (s.fired) {
+        const dx = s.targetX - boss.x;
+        boss.x += dx * Math.min(1, dt * 4);
+      }
+
+      // 1.0s pulse → fire → 1.0s reposition (per burst)
+      if (!s.fired && s.burstT >= 1.0) {
+        spawnRadial(boss.x, boss.y, 24, 130 * bossAI.bulletSpeedMul);
+        s.fired = true;
+      }
+      if (s.burstT >= 2.0 && s.burstIndex < 2) {
+        s.burstIndex++;
+        s.burstT = 0;
+        s.fired = false;
+        s.targetX = BOSS_ZONE.x + BOSS_W / 2
+                  + Math.random() * (BOSS_ZONE.w - BOSS_W);
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (s && !s.fired && s.burstT < 1.0) {
+        const r = 26 + Math.sin(s.burstT * 18) * 6;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(180, 60, 220, 0.85)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(boss.x, boss.y, r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(180, 60, 220, 0.18)';
+        ctx.beginPath();
+        ctx.arc(boss.x, boss.y, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    },
+  },
+
+  // 4 fixed nozzles fire sweeping streams; boss continues moving
+  // and occasionally drops aimed shots.
+  EXHAUST_PIPES: {
+    name: 'EXHAUST PIPES',
+    duration: 8.0,
+    init() {
+      const n = 4;
+      bossAI.state.nozzleX = [];
+      for (let i = 0; i < n; i++) {
+        bossAI.state.nozzleX.push(ARENA.x + ARENA.w * (i + 1) / (n + 1));
+      }
+      bossAI.state.streamT = 0;
+      bossAI.state.aimT = 0;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 1.1);
+      s.streamT += dt;
+      s.aimT += dt;
+      if (s.streamT >= 0.16) {
+        s.streamT = 0;
+        const speed = 130 * bossAI.bulletSpeedMul;
+        for (let i = 0; i < s.nozzleX.length; i++) {
+          // Each nozzle has its own slow sweep cycle.
+          const sweep = Math.sin(bossAI.attackT * 1.4 + i * 0.9) * 0.55;
+          const a = Math.PI / 2 + sweep; // base = straight down
+          spawnBullet(s.nozzleX[i], ARENA.y - 6,
+                      Math.cos(a) * speed, Math.sin(a) * speed);
+        }
+      }
+      if (s.aimT >= 1.1) {
+        s.aimT = 0;
+        spawnAimed(boss.x, boss.y, player.x, player.y,
+                   200 * bossAI.bulletSpeedMul);
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s || !s.nozzleX) return;
+      ctx.save();
+      for (const nx of s.nozzleX) {
+        ctx.fillStyle = '#5a5a5a';
+        ctx.fillRect(nx - 5, ARENA.y - 8, 10, 6);
+        ctx.fillStyle = '#222';
+        ctx.fillRect(nx - 3, ARENA.y - 4, 6, 4);
+      }
+      ctx.restore();
+    },
+  },
+
+  // 3 horizontal walls drift down with single shifting gap;
+  // filler bullets fall between them.
+  SMOG_WALL: {
+    name: 'SMOG WALL',
+    duration: 9.0,
+    init() {
+      bossAI.state.wallIndex = 0;
+      bossAI.state.wallT = 2.5; // spawn first wall right away
+      bossAI.state.fillerT = 0;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.7);
+      s.wallT += dt;
+      s.fillerT += dt;
+      if (s.wallIndex < 3 && s.wallT >= 2.5) {
+        s.wallT = 0;
+        s.wallIndex++;
+        // One new wall — full row with a single gap of ~50px.
+        const gapX = ARENA.x + 35 + Math.random() * (ARENA.w - 70);
+        const gapW = 56;
+        const speed = 80 * bossAI.bulletSpeedMul;
+        for (let x = ARENA.x + 6; x < ARENA.x + ARENA.w - 6; x += 14) {
+          if (x > gapX - gapW / 2 && x < gapX + gapW / 2) continue;
+          spawnBullet(x, ARENA.y - 8, 0, speed);
+        }
+      }
+      if (s.fillerT >= 0.45) {
+        s.fillerT = 0;
+        const fx = ARENA.x + 10 + Math.random() * (ARENA.w - 20);
+        spawnBullet(fx, ARENA.y - 6, 0, 70 * bossAI.bulletSpeedMul);
+      }
+    },
+  },
+
+  // L and R streams travel inward; irregular spacing; 3 wave pairs
+  // at shifting heights.
+  CHEMICAL_RUNOFF: {
+    name: 'CHEMICAL RUNOFF',
+    duration: 7.0,
+    init() {
+      bossAI.state.waveIndex = 0;
+      bossAI.state.waveT = 0;
+      bossAI.state.spawnT = 0;
+      bossAI.state.leftY = ARENA.y + 60 + Math.random() * (ARENA.h - 120);
+      bossAI.state.rightY = ARENA.y + 60 + Math.random() * (ARENA.h - 120);
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.8);
+      s.waveT += dt;
+      s.spawnT += dt;
+
+      if (s.spawnT >= 0.13 && s.waveT < 1.6) {
+        s.spawnT = 0;
+        const speed = 150 * bossAI.bulletSpeedMul;
+        // Irregular: occasionally skip to leave gaps.
+        if (Math.random() > 0.18) {
+          spawnBullet(ARENA.x - 6, s.leftY, speed, 0);
+        }
+        if (Math.random() > 0.18) {
+          spawnBullet(ARENA.x + ARENA.w + 6, s.rightY, -speed, 0);
+        }
+      }
+      if (s.waveT >= 2.2) {
+        s.waveIndex++;
+        if (s.waveIndex < 3) {
+          s.waveT = 0;
+          s.leftY = ARENA.y + 30 + Math.random() * (ARENA.h - 60);
+          s.rightY = ARENA.y + 30 + Math.random() * (ARENA.h - 60);
+        }
+      }
+    },
+  },
+
+  // Fast columns with brief shadow telegraph; sweeps + random bursts.
+  SLUDGE_DRIP: {
+    name: 'SLUDGE DRIP',
+    duration: 9.0,
+    init() {
+      bossAI.state.cols = [];
+      const N = 9;
+      for (let i = 0; i < N; i++) {
+        bossAI.state.cols.push(ARENA.x + ARENA.w * (i + 0.5) / N);
+      }
+      bossAI.state.queue = []; // {colIdx, fireAt}
+      bossAI.state.shadows = []; // {x, life}
+      bossAI.state.programT = 0;
+      bossAI.state.programIdx = 0;
+      // Pre-program: L→R sweep, R→L sweep, two bursts of random doubles.
+      const program = [];
+      const sweepStep = 0.18;
+      let t = 0.4;
+      for (let i = 0; i < N; i++) { program.push({ col: i, at: t }); t += sweepStep; }
+      t += 0.4;
+      for (let i = N - 1; i >= 0; i--) { program.push({ col: i, at: t }); t += sweepStep; }
+      t += 0.4;
+      for (let b = 0; b < 4; b++) {
+        const a = Math.floor(Math.random() * N);
+        let bb = Math.floor(Math.random() * N);
+        if (bb === a) bb = (a + 1) % N;
+        program.push({ col: a, at: t });
+        program.push({ col: bb, at: t });
+        t += 0.5;
+      }
+      bossAI.state.queue = program;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.4);
+      s.programT += dt;
+
+      // Spawn shadow telegraphs 0.3s ahead, then bullets at the time.
+      while (s.programIdx < s.queue.length && s.queue[s.programIdx].at - 0.3 <= s.programT) {
+        const ev = s.queue[s.programIdx];
+        if (!ev.shadowed) {
+          s.shadows.push({ x: s.cols[ev.col], life: 0.3 + (ev.at - s.programT) });
+          ev.shadowed = true;
+        }
+        if (ev.at <= s.programT) {
+          const speed = 220 * bossAI.bulletSpeedMul;
+          spawnBullet(s.cols[ev.col], ARENA.y - 6, 0, speed);
+          s.programIdx++;
+        } else {
+          break;
+        }
+      }
+      // Tick down shadows
+      for (let i = s.shadows.length - 1; i >= 0; i--) {
+        s.shadows[i].life -= dt;
+        if (s.shadows[i].life <= 0) s.shadows.splice(i, 1);
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s || !s.shadows) return;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(180, 240, 180, 0.4)';
+      ctx.lineWidth = 2;
+      for (const sh of s.shadows) {
+        ctx.beginPath();
+        ctx.moveTo(sh.x, ARENA.y);
+        ctx.lineTo(sh.x, ARENA.y + ARENA.h);
+        ctx.stroke();
+      }
+      ctx.restore();
+    },
+  },
+
+  // Two arms rotating outward from boss centered at top.
+  SMOG_SPIRAL: {
+    name: 'SMOG SPIRAL',
+    duration: 7.5,
+    init() {
+      bossAI.state.angle = 0;
+      bossAI.state.spawnT = 0;
+      // Center the boss horizontally for the spiral.
+      bossAI.state.targetX = (BOSS_ZONE.x + BOSS_ZONE.x + BOSS_ZONE.w) / 2;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      // Glide to center.
+      const dx = s.targetX - boss.x;
+      boss.x += dx * Math.min(1, dt * 3);
+
+      s.angle += dt * 2.4; // ~2 rotations across the duration
+      s.spawnT += dt;
+      if (s.spawnT >= 0.085) {
+        s.spawnT = 0;
+        const speed = 110 * bossAI.bulletSpeedMul;
+        // Two arms 180° apart.
+        for (let arm = 0; arm < 2; arm++) {
+          const a = s.angle + arm * Math.PI;
+          spawnBullet(boss.x, boss.y,
+                      Math.cos(a) * speed, Math.sin(a) * speed);
+        }
+      }
+    },
+  },
+
+  // 3 cluster drops, scatter at 1s; 2 rounds.
+  PIPELINE_BURST: {
+    name: 'PIPELINE BURST',
+    duration: 6.5,
+    init() {
+      bossAI.state.round = 0;
+      bossAI.state.roundT = 0;
+      bossAI.state.clusters = []; // {x, y, vy, t, scattered}
+      bossAI.state.spawnedRound = -1;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.7);
+      s.roundT += dt;
+
+      // Spawn a new round of 3 clusters at the start of each round.
+      if (s.spawnedRound < s.round) {
+        for (let i = 0; i < 3; i++) {
+          s.clusters.push({
+            x: ARENA.x + 30 + Math.random() * (ARENA.w - 60),
+            y: ARENA.y - 12,
+            vy: 90 * bossAI.bulletSpeedMul,
+            t: 0,
+            scattered: false,
+          });
+        }
+        s.spawnedRound = s.round;
+      }
+
+      // Update clusters
+      for (let i = s.clusters.length - 1; i >= 0; i--) {
+        const c = s.clusters[i];
+        c.t += dt;
+        c.y += c.vy * dt;
+        if (!c.scattered && c.t >= 1.0) {
+          c.scattered = true;
+          // Scatter into a downward-biased cone of 10 bullets.
+          const N = 10;
+          for (let k = 0; k < N; k++) {
+            const a = Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.9;
+            const sp = (130 + Math.random() * 80) * bossAI.bulletSpeedMul;
+            spawnBullet(c.x, c.y, Math.cos(a) * sp, Math.sin(a) * sp);
+          }
+          s.clusters.splice(i, 1);
+        }
+      }
+
+      if (s.round < 1 && s.roundT >= 3.0) {
+        s.round++;
+        s.roundT = 0;
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s || !s.clusters) return;
+      ctx.save();
+      for (const c of s.clusters) {
+        // Tight clump indicator
+        ctx.fillStyle = 'rgba(60, 220, 60, 0.85)';
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(120, 255, 120, 0.35)';
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, 11, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    },
+  },
+
+  // Rapid-fires at the player's current position; boss keeps moving.
+  AIMED_BARRAGE: {
+    name: 'AIMED BARRAGE',
+    duration: 5.0,
+    init() {
+      bossAI.state.fireT = 0;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.9);
+      s.fireT += dt;
+      if (s.fireT >= 0.2) {
+        s.fireT = 0;
+        spawnAimed(boss.x, boss.y, player.x, player.y,
+                   220 * bossAI.bulletSpeedMul, { color: '#aaff77' });
+      }
+    },
+  },
+
+  // Signature — 5 expanding rings of increasing density, then a
+  // 3-second stun window where the boss is exposed.
+  ACID_RAIN: {
+    name: 'ACID RAIN',
+    duration: 11.5,
+    init() {
+      bossAI.state.phase = 'telegraph';
+      bossAI.state.t = 0;
+      bossAI.state.ringIndex = 0;
+      // Park boss at center for the signature.
+      bossAI.state.targetX = (BOSS_ZONE.x + BOSS_ZONE.x + BOSS_ZONE.w) / 2;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      // Drift to center during telegraph.
+      if (s.phase === 'telegraph') {
+        const dx = s.targetX - boss.x;
+        boss.x += dx * Math.min(1, dt * 5);
+      }
+      s.t += dt;
+
+      if (s.phase === 'telegraph') {
+        if (s.t >= 1.0) {
+          s.phase = 'rings';
+          s.t = 0.8; // fire first ring immediately
+          s.ringIndex = 0;
+        }
+      } else if (s.phase === 'rings') {
+        const counts = [16, 20, 24, 28, 32];
+        if (s.ringIndex < counts.length && s.t >= 0.8) {
+          s.t = 0;
+          spawnRadial(boss.x, boss.y, counts[s.ringIndex],
+                      110, s.ringIndex * 0.13,
+                      { color: ACID_BULLET_COLOR });
+          s.ringIndex++;
+        }
+        if (s.ringIndex >= counts.length && s.t >= 0.8) {
+          s.phase = 'stun';
+          s.t = 0;
+        }
+      } else if (s.phase === 'stun') {
+        // Boss frozen, vulnerable, no attacks for 3s.
+        // (Player auto-fire racks up bonus damage naturally.)
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s) return;
+      if (s.phase === 'telegraph') {
+        const a = 0.25 + 0.15 * Math.sin(s.t * 30);
+        ctx.fillStyle = 'rgba(60, 220, 60, ' + a.toFixed(2) + ')';
+        ctx.fillRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h);
+        // Signature label
+        ctx.font = 'bold 18px "Courier New", monospace';
+        ctx.fillStyle = '#aaff66';
+        ctx.textAlign = 'center';
+        ctx.fillText('ACID RAIN', CANVAS_W / 2, ARENA.y - 30);
+      } else if (s.phase === 'stun') {
+        ctx.font = 'bold 11px "Courier New", monospace';
+        ctx.fillStyle = '#ffe060';
+        ctx.textAlign = 'center';
+        const blink = Math.floor(s.t * 6) % 2 === 0;
+        if (blink) ctx.fillText('!! STUNNED !!', boss.x, boss.y - BOSS_H / 2 - 8);
+      }
+    },
+  },
+};
+
+// ---------- Replaces the old sweep-only updateBoss ----------
+function updateBoss(dt) {
+  if (boss.flashTimer > 0) boss.flashTimer -= dt;
+  if (!isPlayingActive()) return;
+
+  // Phase transitions on HP thresholds. Phase 1 → 2 fires AFTER
+  // Acid Rain has resolved (post-30%, around 22%).
+  const hpFrac = boss.hp / boss.maxHp;
+  if (game.phase === 1 && bossAI.acidRainFired
+      && bossAI.attack !== 'ACID_RAIN' && hpFrac <= 0.22) {
+    game.phase = 1.5;
+    enemyBullets.length = 0;
+    playCutscene(getPhase1To2(), () => {
+      startPhase(2);
+      resetBossAI();
+    });
+    return;
+  } else if (game.phase === 2 && hpFrac <= 0.05) {
+    game.phase = 2.5;
+    enemyBullets.length = 0;
+    playCutscene(getPhase2To3(), () => {
+      startPhase(3);
+      resetBossAI();
+    });
+    return;
+  }
+
+  if (game.phase === 1) {
+    // Full Phase 1 attack rotation.
+    updateBossAI(dt);
+  } else {
+    // Phase 2 / 3 attack patterns are next pass — for now boss
+    // just sweeps so cutscenes can still fire on HP thresholds.
+    bossSweep(dt);
+  }
+}
+
+function drawBossAttacks() {
+  if (!bossAI.attack) return;
+  const def = ATTACKS[bossAI.attack];
+  if (def && def.draw) def.draw();
 }
 
 function updateBullets(dt) {
@@ -655,7 +1463,11 @@ function checkCollisions() {
         boss.flashTimer = 0.08;
         if (boss.hp <= 0) {
           boss.hp = 0;
-          game.victory = true;
+          // Defeat cutscene first; victory state set when it ends.
+          playCutscene(getDefeatLines(), () => {
+            stopAllMusic();
+            game.victory = true;
+          });
         }
       }
     }
@@ -701,14 +1513,56 @@ function checkCollisions() {
 }
 
 function updateCutscene(dt) {
-  if (!cutscene.active || cutscene.done) return;
+  if (!cutscene.active) return;
   const line = cutscene.lines[cutscene.index];
   if (!line) return;
-  cutscene.charT += CUTSCENE_TYPING_CPS * dt;
-  if (cutscene.charT >= line.text.length) {
-    cutscene.charT = line.text.length;
-    cutscene.done = true;
+
+  if (!cutscene.done) {
+    if (line.silent) {
+      // Silent lines complete instantly; the pauseAfter handles the beat.
+      cutscene.charT = 0;
+      cutscene.done = true;
+      cutscene.holdT = 0;
+    } else {
+      const cps = line.typingCps || CUTSCENE_TYPING_CPS;
+      cutscene.charT += cps * dt;
+      if (cutscene.charT >= line.text.length) {
+        cutscene.charT = line.text.length;
+        cutscene.done = true;
+        cutscene.holdT = 0;
+      }
+    }
+    return;
   }
+
+  // Line finished. Advance the post-line hold timer. Silent lines
+  // auto-advance once their hold expires; spoken lines wait for input.
+  cutscene.holdT += dt;
+  if (line.silent) {
+    const need = line.pauseAfter || 0.8;
+    if (cutscene.holdT >= need) {
+      cutscene.index += 1;
+      if (cutscene.index >= cutscene.lines.length) {
+        endCutscene();
+      } else {
+        cutscene.charT = 0;
+        cutscene.done = false;
+        cutscene.holdT = 0;
+      }
+    }
+  } else if (line.pauseAfter && line.speaker === 'red' && cutscene.index === cutscene.lines.length - 1) {
+    // Final defeat line auto-advances after its pauseAfter.
+    if (cutscene.holdT >= line.pauseAfter) {
+      cutscene.index += 1;
+      if (cutscene.index >= cutscene.lines.length) endCutscene();
+    }
+  }
+}
+
+function updateNowPlaying(dt) {
+  if (!nowPlaying.active) return;
+  nowPlaying.timer -= dt;
+  if (nowPlaying.timer <= 0) nowPlaying.active = false;
 }
 
 function updateStars(dt) {
@@ -944,7 +1798,9 @@ function drawHUD() {
   ctx.fillText('[' + player.state.toUpperCase() + ']', CANVAS_W - 20, CANVAS_H - 22);
 }
 
-function drawTextBox(speaker, text, fullText) {
+function drawTextBox(speaker, text, fullText, glitch) {
+  if (speaker === 'red') { drawRedBox(text, fullText); return; }
+
   // Position: above arena for boss, below arena for player.
   const isBoss = speaker === 'boss';
   const w = 460;
@@ -1003,8 +1859,64 @@ function drawCutscene() {
   if (!cutscene.active) return;
   const line = cutscene.lines[cutscene.index];
   if (!line) return;
+  if (line.silent) return; // empty held beat
   const shown = line.text.slice(0, Math.floor(cutscene.charT));
-  drawTextBox(line.speaker, shown, line.text);
+  drawTextBox(line.speaker, shown, line.text, line.glitch);
+}
+
+// "[RED]: ..." takeover lines get raw red text on a black wash —
+// no rounded box, no speaker label. Slight jitter for menace.
+function drawRedBox(text, fullText) {
+  // Full-screen red wash (subtle).
+  ctx.save();
+  ctx.fillStyle = 'rgba(40, 0, 0, 0.55)';
+  ctx.fillRect(0, ARENA.y - 90, CANVAS_W, 110);
+
+  ctx.font = 'bold 22px "Courier New", monospace';
+  ctx.fillStyle = '#ff2828';
+  ctx.textAlign = 'center';
+  // Mild shake.
+  const sx = (Math.random() - 0.5) * 1.6;
+  const sy = (Math.random() - 0.5) * 1.4;
+  ctx.fillText(text, CANVAS_W / 2 + sx, ARENA.y - 50 + sy);
+
+  // Continue indicator once fully revealed (only when player can advance).
+  if (text.length === fullText.length) {
+    ctx.font = '16px "Courier New", monospace';
+    ctx.fillStyle = '#ff5050';
+    const t = performance.now() / 250;
+    const ind = (Math.sin(t) > 0) ? '▼' : ' ';
+    ctx.textAlign = 'right';
+    ctx.fillText(ind, CANVAS_W - 30, ARENA.y - 18);
+  }
+  ctx.restore();
+}
+
+// Top-left "Now playing:" banner — chunky 8-bit feel, fades out.
+function drawNowPlaying() {
+  if (!nowPlaying.active) return;
+  let alpha = 1;
+  if (nowPlaying.timer < 0.6) alpha = Math.max(0, nowPlaying.timer / 0.6);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.font = 'bold 11px "Courier New", monospace';
+  ctx.textAlign = 'left';
+  // Background panel
+  const labelW = ctx.measureText('NOW PLAYING:').width;
+  const songW  = ctx.measureText(nowPlaying.text).width;
+  const panelW = Math.max(labelW, songW) + 16;
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+  ctx.fillRect(8, 8, panelW, 36);
+  ctx.strokeStyle = '#ffd900';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(8.5, 8.5, panelW, 36);
+  // Label
+  ctx.fillStyle = '#ffd900';
+  ctx.fillText('NOW PLAYING:', 16, 22);
+  // Song name
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(nowPlaying.text, 16, 36);
+  ctx.restore();
 }
 
 function drawOverlay(text, sub) {
@@ -1028,10 +1940,12 @@ function render() {
   drawStars();
   drawBoss();
   drawArena();
+  drawBossAttacks();
   drawPlayer();
   drawBullets();
   drawHUD();
   drawCutscene();
+  drawNowPlaying();
 
   if (game.over) {
     drawOverlay('GAME OVER', 'Press SPACE to retry');
@@ -1055,6 +1969,7 @@ function frame(now) {
   game.fpsAvg = game.fpsAvg * 0.95 + (1 / dt) * 0.05;
 
   updateStars(dt);
+  updateNowPlaying(dt);
 
   if (cutscene.active) {
     updateCutscene(dt);
