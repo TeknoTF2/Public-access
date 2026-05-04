@@ -232,7 +232,7 @@ const boss = {
   x: CANVAS_W / 2,
   y: BOSS_ZONE.y + BOSS_ZONE.h / 2,
   vx: BOSS_SWEEP_SPEED,
-  hp: 30, maxHp: 30,            // placeholder for engine demo; tune with real attacks
+  hp: 200, maxHp: 200,          // tunable; sized so Phase 1 plays through several attacks before Acid Rain
   invincible: true,             // until intro cutscene ends
   flashTimer: 0,                // visual feedback on hit
 };
@@ -604,6 +604,8 @@ function resetGame() {
   cutscene.holdT = 0;
   cutscene.onDone = null;
 
+  resetBossAI();
+
   // Stop any in-progress music; the next unpause will start phase 1.
   stopAllMusic();
   nowPlaying.active = false;
@@ -792,30 +794,642 @@ function clampPlayerToArena() {
   player.y = clamp(player.y, ARENA.y + half, ARENA.y + ARENA.h - half);
 }
 
-function updateBoss(dt) {
-  if (boss.flashTimer > 0) boss.flashTimer -= dt;
-  if (!isPlayingActive()) return;
+// =============================================================
+//  BOSS AI / ATTACK PATTERNS
+// =============================================================
+//  Phase 1 is fully implemented per phase1_attacks.md:
+//    - 8 standard attacks in randomized rotation (no immediate
+//      repeats); first attack is always TOXIC_CLOUD per spec.
+//    - Average attack ~7s with 1.2s downtime.
+//    - Every 3rd attack: 0.5s downtime. Every 5th: zero downtime.
+//    - At 30% HP: in-progress attack interrupts and ACID_RAIN
+//      fires (signature). After it resolves, normal rotation
+//      resumes with bulletSpeedMul=1.3.
+//
+//  Phase 2 and Phase 3 attack patterns are deferred to next pass
+//  — for those phases the boss falls back to a simple sweep so
+//  cutscenes still trigger on HP thresholds.
+// =============================================================
 
-  // Sweep L↔R inside BOSS_ZONE.
-  boss.x += boss.vx * dt;
+const ENEMY_BULLET_COLOR = '#3aff3a'; // green per spec — visual clarity
+const ACID_BULLET_COLOR  = '#aaff44'; // brighter green for the signature
+
+// ---------- Bullet spawn helpers ----------
+function spawnBullet(x, y, vx, vy, opts) {
+  const o = opts || {};
+  enemyBullets.push({
+    x, y, vx, vy,
+    r: o.r != null ? o.r : ENEMY_BULLET_R,
+    color: o.color || ENEMY_BULLET_COLOR,
+  });
+}
+
+function spawnAimed(x, y, tx, ty, speed, opts) {
+  const dx = tx - x, dy = ty - y;
+  const len = Math.hypot(dx, dy) || 1;
+  spawnBullet(x, y, (dx / len) * speed, (dy / len) * speed, opts);
+}
+
+function spawnRadial(x, y, count, speed, startAngle, opts) {
+  const a0 = startAngle || 0;
+  for (let i = 0; i < count; i++) {
+    const a = a0 + (i / count) * Math.PI * 2;
+    spawnBullet(x, y, Math.cos(a) * speed, Math.sin(a) * speed, opts);
+  }
+}
+
+// ---------- Boss AI state ----------
+const bossAI = {
+  attack: null,        // active attack id, or null during downtime
+  attackT: 0,          // seconds within the current attack
+  downtime: 1.5,       // seconds of downtime remaining
+  history: [],         // last few attack ids (for "no immediate repeat")
+  counter: 0,          // attacks performed this phase
+  firstAttack: true,
+  acidRainFired: false,
+  bulletSpeedMul: 1.0, // bumps to 1.3 after Acid Rain resolves
+  state: {},           // attack-specific scratch state
+};
+
+function resetBossAI() {
+  bossAI.attack = null;
+  bossAI.attackT = 0;
+  bossAI.downtime = 1.5;
+  bossAI.history = [];
+  bossAI.counter = 0;
+  bossAI.firstAttack = true;
+  bossAI.acidRainFired = false;
+  bossAI.bulletSpeedMul = 1.0;
+  bossAI.state = {};
+}
+
+// ---------- Phase 1 attack pool ----------
+const PHASE1_POOL = [
+  'TOXIC_CLOUD', 'EXHAUST_PIPES', 'SMOG_WALL', 'CHEMICAL_RUNOFF',
+  'SLUDGE_DRIP', 'SMOG_SPIRAL', 'PIPELINE_BURST', 'AIMED_BARRAGE',
+];
+
+function pickNextAttack() {
+  if (bossAI.firstAttack) {
+    bossAI.firstAttack = false;
+    return 'TOXIC_CLOUD'; // mandated opener
+  }
+  const last = bossAI.history[bossAI.history.length - 1];
+  const candidates = PHASE1_POOL.filter(a => a !== last);
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function startAttack(id) {
+  bossAI.attack = id;
+  bossAI.attackT = 0;
+  bossAI.history.push(id);
+  if (bossAI.history.length > 3) bossAI.history.shift();
+  bossAI.state = {};
+  const def = ATTACKS[id];
+  if (def && def.init) def.init();
+}
+
+function endAttack() {
+  const id = bossAI.attack;
+  bossAI.attack = null;
+  if (id === 'ACID_RAIN') {
+    // Per spec: faster bullets thereafter.
+    bossAI.bulletSpeedMul = 1.3;
+    bossAI.downtime = 0.5; // brief breather after Acid Rain
+    return;
+  }
+  bossAI.counter++;
+  // Cycling rules from phase1_attacks.md.
+  if (bossAI.counter % 5 === 0)      bossAI.downtime = 0;
+  else if (bossAI.counter % 3 === 0) bossAI.downtime = 0.5;
+  else                                bossAI.downtime = 1.2;
+}
+
+// Sweep boss L↔R inside BOSS_ZONE — used during downtime and by
+// attacks that don't lock the boss.
+function bossSweep(dt, speedMul) {
+  const m = speedMul || 1.0;
+  boss.x += boss.vx * dt * m;
   const left  = BOSS_ZONE.x + BOSS_W / 2;
   const right = BOSS_ZONE.x + BOSS_ZONE.w - BOSS_W / 2;
   if (boss.x < left)  { boss.x = left;  boss.vx =  Math.abs(boss.vx); }
   if (boss.x > right) { boss.x = right; boss.vx = -Math.abs(boss.vx); }
+}
 
-  // Phase transitions on HP thresholds. The cutscene's onDone
-  // callback advances the phase (which switches music + shows
-  // the "Now playing" banner).
-  const hpFrac = boss.hp / boss.maxHp;
-  if (game.phase === 1 && hpFrac <= 0.55) {
-    game.phase = 1.5; // in transit; gates against re-entry
-    playCutscene(getPhase1To2(), () => startPhase(2));
-  } else if (game.phase === 2 && hpFrac <= 0.10) {
-    game.phase = 2.5;
-    playCutscene(getPhase2To3(), () => startPhase(3));
+function updateBossAI(dt) {
+  // Acid Rain interrupt at 30% HP — fires only once per phase.
+  if (game.phase === 1 && !bossAI.acidRainFired
+      && bossAI.attack !== 'ACID_RAIN'
+      && boss.hp / boss.maxHp <= 0.30) {
+    bossAI.acidRainFired = true;
+    enemyBullets.length = 0; // clean slate for the signature
+    bossAI.attack = null;
+    bossAI.downtime = 0;
+    startAttack('ACID_RAIN');
   }
 
-  // Real Phase 1/2/3 attack patterns hook in here.
+  if (!bossAI.attack) {
+    // Downtime: boss sweeps, waits to pick the next attack.
+    bossSweep(dt);
+    bossAI.downtime -= dt;
+    if (bossAI.downtime <= 0) {
+      const next = pickNextAttack();
+      startAttack(next);
+    }
+    return;
+  }
+
+  bossAI.attackT += dt;
+  const def = ATTACKS[bossAI.attack];
+  if (def && def.update) def.update(dt);
+
+  if (bossAI.attackT >= def.duration) endAttack();
+}
+
+// ---------- Phase 1 attacks ----------
+const ATTACKS = {
+
+  // 3 radial bursts with reposition between each.
+  TOXIC_CLOUD: {
+    name: 'TOXIC CLOUD BURST',
+    duration: 6.0,
+    init() {
+      bossAI.state.burstIndex = 0;
+      bossAI.state.burstT = 0;
+      bossAI.state.fired = false;
+      bossAI.state.targetX = boss.x;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      s.burstT += dt;
+
+      // Reposition between bursts (after the burst fires).
+      if (s.fired) {
+        const dx = s.targetX - boss.x;
+        boss.x += dx * Math.min(1, dt * 4);
+      }
+
+      // 1.0s pulse → fire → 1.0s reposition (per burst)
+      if (!s.fired && s.burstT >= 1.0) {
+        spawnRadial(boss.x, boss.y, 24, 130 * bossAI.bulletSpeedMul);
+        s.fired = true;
+      }
+      if (s.burstT >= 2.0 && s.burstIndex < 2) {
+        s.burstIndex++;
+        s.burstT = 0;
+        s.fired = false;
+        s.targetX = BOSS_ZONE.x + BOSS_W / 2
+                  + Math.random() * (BOSS_ZONE.w - BOSS_W);
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (s && !s.fired && s.burstT < 1.0) {
+        const r = 26 + Math.sin(s.burstT * 18) * 6;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(180, 60, 220, 0.85)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(boss.x, boss.y, r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(180, 60, 220, 0.18)';
+        ctx.beginPath();
+        ctx.arc(boss.x, boss.y, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    },
+  },
+
+  // 4 fixed nozzles fire sweeping streams; boss continues moving
+  // and occasionally drops aimed shots.
+  EXHAUST_PIPES: {
+    name: 'EXHAUST PIPES',
+    duration: 8.0,
+    init() {
+      const n = 4;
+      bossAI.state.nozzleX = [];
+      for (let i = 0; i < n; i++) {
+        bossAI.state.nozzleX.push(ARENA.x + ARENA.w * (i + 1) / (n + 1));
+      }
+      bossAI.state.streamT = 0;
+      bossAI.state.aimT = 0;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 1.1);
+      s.streamT += dt;
+      s.aimT += dt;
+      if (s.streamT >= 0.16) {
+        s.streamT = 0;
+        const speed = 130 * bossAI.bulletSpeedMul;
+        for (let i = 0; i < s.nozzleX.length; i++) {
+          // Each nozzle has its own slow sweep cycle.
+          const sweep = Math.sin(bossAI.attackT * 1.4 + i * 0.9) * 0.55;
+          const a = Math.PI / 2 + sweep; // base = straight down
+          spawnBullet(s.nozzleX[i], ARENA.y - 6,
+                      Math.cos(a) * speed, Math.sin(a) * speed);
+        }
+      }
+      if (s.aimT >= 1.1) {
+        s.aimT = 0;
+        spawnAimed(boss.x, boss.y, player.x, player.y,
+                   200 * bossAI.bulletSpeedMul);
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s || !s.nozzleX) return;
+      ctx.save();
+      for (const nx of s.nozzleX) {
+        ctx.fillStyle = '#5a5a5a';
+        ctx.fillRect(nx - 5, ARENA.y - 8, 10, 6);
+        ctx.fillStyle = '#222';
+        ctx.fillRect(nx - 3, ARENA.y - 4, 6, 4);
+      }
+      ctx.restore();
+    },
+  },
+
+  // 3 horizontal walls drift down with single shifting gap;
+  // filler bullets fall between them.
+  SMOG_WALL: {
+    name: 'SMOG WALL',
+    duration: 9.0,
+    init() {
+      bossAI.state.wallIndex = 0;
+      bossAI.state.wallT = 2.5; // spawn first wall right away
+      bossAI.state.fillerT = 0;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.7);
+      s.wallT += dt;
+      s.fillerT += dt;
+      if (s.wallIndex < 3 && s.wallT >= 2.5) {
+        s.wallT = 0;
+        s.wallIndex++;
+        // One new wall — full row with a single gap of ~50px.
+        const gapX = ARENA.x + 35 + Math.random() * (ARENA.w - 70);
+        const gapW = 56;
+        const speed = 80 * bossAI.bulletSpeedMul;
+        for (let x = ARENA.x + 6; x < ARENA.x + ARENA.w - 6; x += 14) {
+          if (x > gapX - gapW / 2 && x < gapX + gapW / 2) continue;
+          spawnBullet(x, ARENA.y - 8, 0, speed);
+        }
+      }
+      if (s.fillerT >= 0.45) {
+        s.fillerT = 0;
+        const fx = ARENA.x + 10 + Math.random() * (ARENA.w - 20);
+        spawnBullet(fx, ARENA.y - 6, 0, 70 * bossAI.bulletSpeedMul);
+      }
+    },
+  },
+
+  // L and R streams travel inward; irregular spacing; 3 wave pairs
+  // at shifting heights.
+  CHEMICAL_RUNOFF: {
+    name: 'CHEMICAL RUNOFF',
+    duration: 7.0,
+    init() {
+      bossAI.state.waveIndex = 0;
+      bossAI.state.waveT = 0;
+      bossAI.state.spawnT = 0;
+      bossAI.state.leftY = ARENA.y + 60 + Math.random() * (ARENA.h - 120);
+      bossAI.state.rightY = ARENA.y + 60 + Math.random() * (ARENA.h - 120);
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.8);
+      s.waveT += dt;
+      s.spawnT += dt;
+
+      if (s.spawnT >= 0.13 && s.waveT < 1.6) {
+        s.spawnT = 0;
+        const speed = 150 * bossAI.bulletSpeedMul;
+        // Irregular: occasionally skip to leave gaps.
+        if (Math.random() > 0.18) {
+          spawnBullet(ARENA.x - 6, s.leftY, speed, 0);
+        }
+        if (Math.random() > 0.18) {
+          spawnBullet(ARENA.x + ARENA.w + 6, s.rightY, -speed, 0);
+        }
+      }
+      if (s.waveT >= 2.2) {
+        s.waveIndex++;
+        if (s.waveIndex < 3) {
+          s.waveT = 0;
+          s.leftY = ARENA.y + 30 + Math.random() * (ARENA.h - 60);
+          s.rightY = ARENA.y + 30 + Math.random() * (ARENA.h - 60);
+        }
+      }
+    },
+  },
+
+  // Fast columns with brief shadow telegraph; sweeps + random bursts.
+  SLUDGE_DRIP: {
+    name: 'SLUDGE DRIP',
+    duration: 9.0,
+    init() {
+      bossAI.state.cols = [];
+      const N = 9;
+      for (let i = 0; i < N; i++) {
+        bossAI.state.cols.push(ARENA.x + ARENA.w * (i + 0.5) / N);
+      }
+      bossAI.state.queue = []; // {colIdx, fireAt}
+      bossAI.state.shadows = []; // {x, life}
+      bossAI.state.programT = 0;
+      bossAI.state.programIdx = 0;
+      // Pre-program: L→R sweep, R→L sweep, two bursts of random doubles.
+      const program = [];
+      const sweepStep = 0.18;
+      let t = 0.4;
+      for (let i = 0; i < N; i++) { program.push({ col: i, at: t }); t += sweepStep; }
+      t += 0.4;
+      for (let i = N - 1; i >= 0; i--) { program.push({ col: i, at: t }); t += sweepStep; }
+      t += 0.4;
+      for (let b = 0; b < 4; b++) {
+        const a = Math.floor(Math.random() * N);
+        let bb = Math.floor(Math.random() * N);
+        if (bb === a) bb = (a + 1) % N;
+        program.push({ col: a, at: t });
+        program.push({ col: bb, at: t });
+        t += 0.5;
+      }
+      bossAI.state.queue = program;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.4);
+      s.programT += dt;
+
+      // Spawn shadow telegraphs 0.3s ahead, then bullets at the time.
+      while (s.programIdx < s.queue.length && s.queue[s.programIdx].at - 0.3 <= s.programT) {
+        const ev = s.queue[s.programIdx];
+        if (!ev.shadowed) {
+          s.shadows.push({ x: s.cols[ev.col], life: 0.3 + (ev.at - s.programT) });
+          ev.shadowed = true;
+        }
+        if (ev.at <= s.programT) {
+          const speed = 220 * bossAI.bulletSpeedMul;
+          spawnBullet(s.cols[ev.col], ARENA.y - 6, 0, speed);
+          s.programIdx++;
+        } else {
+          break;
+        }
+      }
+      // Tick down shadows
+      for (let i = s.shadows.length - 1; i >= 0; i--) {
+        s.shadows[i].life -= dt;
+        if (s.shadows[i].life <= 0) s.shadows.splice(i, 1);
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s || !s.shadows) return;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(180, 240, 180, 0.4)';
+      ctx.lineWidth = 2;
+      for (const sh of s.shadows) {
+        ctx.beginPath();
+        ctx.moveTo(sh.x, ARENA.y);
+        ctx.lineTo(sh.x, ARENA.y + ARENA.h);
+        ctx.stroke();
+      }
+      ctx.restore();
+    },
+  },
+
+  // Two arms rotating outward from boss centered at top.
+  SMOG_SPIRAL: {
+    name: 'SMOG SPIRAL',
+    duration: 7.5,
+    init() {
+      bossAI.state.angle = 0;
+      bossAI.state.spawnT = 0;
+      // Center the boss horizontally for the spiral.
+      bossAI.state.targetX = (BOSS_ZONE.x + BOSS_ZONE.x + BOSS_ZONE.w) / 2;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      // Glide to center.
+      const dx = s.targetX - boss.x;
+      boss.x += dx * Math.min(1, dt * 3);
+
+      s.angle += dt * 2.4; // ~2 rotations across the duration
+      s.spawnT += dt;
+      if (s.spawnT >= 0.085) {
+        s.spawnT = 0;
+        const speed = 110 * bossAI.bulletSpeedMul;
+        // Two arms 180° apart.
+        for (let arm = 0; arm < 2; arm++) {
+          const a = s.angle + arm * Math.PI;
+          spawnBullet(boss.x, boss.y,
+                      Math.cos(a) * speed, Math.sin(a) * speed);
+        }
+      }
+    },
+  },
+
+  // 3 cluster drops, scatter at 1s; 2 rounds.
+  PIPELINE_BURST: {
+    name: 'PIPELINE BURST',
+    duration: 6.5,
+    init() {
+      bossAI.state.round = 0;
+      bossAI.state.roundT = 0;
+      bossAI.state.clusters = []; // {x, y, vy, t, scattered}
+      bossAI.state.spawnedRound = -1;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.7);
+      s.roundT += dt;
+
+      // Spawn a new round of 3 clusters at the start of each round.
+      if (s.spawnedRound < s.round) {
+        for (let i = 0; i < 3; i++) {
+          s.clusters.push({
+            x: ARENA.x + 30 + Math.random() * (ARENA.w - 60),
+            y: ARENA.y - 12,
+            vy: 90 * bossAI.bulletSpeedMul,
+            t: 0,
+            scattered: false,
+          });
+        }
+        s.spawnedRound = s.round;
+      }
+
+      // Update clusters
+      for (let i = s.clusters.length - 1; i >= 0; i--) {
+        const c = s.clusters[i];
+        c.t += dt;
+        c.y += c.vy * dt;
+        if (!c.scattered && c.t >= 1.0) {
+          c.scattered = true;
+          // Scatter into a downward-biased cone of 10 bullets.
+          const N = 10;
+          for (let k = 0; k < N; k++) {
+            const a = Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.9;
+            const sp = (130 + Math.random() * 80) * bossAI.bulletSpeedMul;
+            spawnBullet(c.x, c.y, Math.cos(a) * sp, Math.sin(a) * sp);
+          }
+          s.clusters.splice(i, 1);
+        }
+      }
+
+      if (s.round < 1 && s.roundT >= 3.0) {
+        s.round++;
+        s.roundT = 0;
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s || !s.clusters) return;
+      ctx.save();
+      for (const c of s.clusters) {
+        // Tight clump indicator
+        ctx.fillStyle = 'rgba(60, 220, 60, 0.85)';
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(120, 255, 120, 0.35)';
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, 11, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    },
+  },
+
+  // Rapid-fires at the player's current position; boss keeps moving.
+  AIMED_BARRAGE: {
+    name: 'AIMED BARRAGE',
+    duration: 5.0,
+    init() {
+      bossAI.state.fireT = 0;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.9);
+      s.fireT += dt;
+      if (s.fireT >= 0.2) {
+        s.fireT = 0;
+        spawnAimed(boss.x, boss.y, player.x, player.y,
+                   220 * bossAI.bulletSpeedMul, { color: '#aaff77' });
+      }
+    },
+  },
+
+  // Signature — 5 expanding rings of increasing density, then a
+  // 3-second stun window where the boss is exposed.
+  ACID_RAIN: {
+    name: 'ACID RAIN',
+    duration: 11.5,
+    init() {
+      bossAI.state.phase = 'telegraph';
+      bossAI.state.t = 0;
+      bossAI.state.ringIndex = 0;
+      // Park boss at center for the signature.
+      bossAI.state.targetX = (BOSS_ZONE.x + BOSS_ZONE.x + BOSS_ZONE.w) / 2;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      // Drift to center during telegraph.
+      if (s.phase === 'telegraph') {
+        const dx = s.targetX - boss.x;
+        boss.x += dx * Math.min(1, dt * 5);
+      }
+      s.t += dt;
+
+      if (s.phase === 'telegraph') {
+        if (s.t >= 1.0) {
+          s.phase = 'rings';
+          s.t = 0.8; // fire first ring immediately
+          s.ringIndex = 0;
+        }
+      } else if (s.phase === 'rings') {
+        const counts = [16, 20, 24, 28, 32];
+        if (s.ringIndex < counts.length && s.t >= 0.8) {
+          s.t = 0;
+          spawnRadial(boss.x, boss.y, counts[s.ringIndex],
+                      110, s.ringIndex * 0.13,
+                      { color: ACID_BULLET_COLOR });
+          s.ringIndex++;
+        }
+        if (s.ringIndex >= counts.length && s.t >= 0.8) {
+          s.phase = 'stun';
+          s.t = 0;
+        }
+      } else if (s.phase === 'stun') {
+        // Boss frozen, vulnerable, no attacks for 3s.
+        // (Player auto-fire racks up bonus damage naturally.)
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s) return;
+      if (s.phase === 'telegraph') {
+        const a = 0.25 + 0.15 * Math.sin(s.t * 30);
+        ctx.fillStyle = 'rgba(60, 220, 60, ' + a.toFixed(2) + ')';
+        ctx.fillRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h);
+        // Signature label
+        ctx.font = 'bold 18px "Courier New", monospace';
+        ctx.fillStyle = '#aaff66';
+        ctx.textAlign = 'center';
+        ctx.fillText('ACID RAIN', CANVAS_W / 2, ARENA.y - 30);
+      } else if (s.phase === 'stun') {
+        ctx.font = 'bold 11px "Courier New", monospace';
+        ctx.fillStyle = '#ffe060';
+        ctx.textAlign = 'center';
+        const blink = Math.floor(s.t * 6) % 2 === 0;
+        if (blink) ctx.fillText('!! STUNNED !!', boss.x, boss.y - BOSS_H / 2 - 8);
+      }
+    },
+  },
+};
+
+// ---------- Replaces the old sweep-only updateBoss ----------
+function updateBoss(dt) {
+  if (boss.flashTimer > 0) boss.flashTimer -= dt;
+  if (!isPlayingActive()) return;
+
+  // Phase transitions on HP thresholds. Phase 1 → 2 fires AFTER
+  // Acid Rain has resolved (post-30%, around 22%).
+  const hpFrac = boss.hp / boss.maxHp;
+  if (game.phase === 1 && bossAI.acidRainFired
+      && bossAI.attack !== 'ACID_RAIN' && hpFrac <= 0.22) {
+    game.phase = 1.5;
+    enemyBullets.length = 0;
+    playCutscene(getPhase1To2(), () => {
+      startPhase(2);
+      resetBossAI();
+    });
+    return;
+  } else if (game.phase === 2 && hpFrac <= 0.05) {
+    game.phase = 2.5;
+    enemyBullets.length = 0;
+    playCutscene(getPhase2To3(), () => {
+      startPhase(3);
+      resetBossAI();
+    });
+    return;
+  }
+
+  if (game.phase === 1) {
+    // Full Phase 1 attack rotation.
+    updateBossAI(dt);
+  } else {
+    // Phase 2 / 3 attack patterns are next pass — for now boss
+    // just sweeps so cutscenes can still fire on HP thresholds.
+    bossSweep(dt);
+  }
+}
+
+function drawBossAttacks() {
+  if (!bossAI.attack) return;
+  const def = ATTACKS[bossAI.attack];
+  if (def && def.draw) def.draw();
 }
 
 function updateBullets(dt) {
@@ -1326,6 +1940,7 @@ function render() {
   drawStars();
   drawBoss();
   drawArena();
+  drawBossAttacks();
   drawPlayer();
   drawBullets();
   drawHUD();
