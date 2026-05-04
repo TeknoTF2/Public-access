@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<title>~ Visit Madame Claire ~ TV Odyssey Kids Zone</title>
+<style>
+body {
+  background-color: #ffd900;
+  background-image:
+    repeating-linear-gradient(45deg, transparent 0, transparent 18px, rgba(255,255,255,0.35) 18px, rgba(255,255,255,0.35) 19px);
+  font-family: 'Comic Sans MS', 'Comic Sans', cursive, sans-serif;
+  color: #2c1810;
+  margin: 0;
+  padding: 16px 10px;
+}
+
+.frame {
+  width: 760px;
+  max-width: 96vw;
+  margin: 0 auto;
+  background: #fff;
+  border: 4px solid #2c1810;
+  box-shadow: 8px 8px 0 #2c1810;
+}
+
+.stripes-bar {
+  height: 22px;
+  background: repeating-linear-gradient(
+    to right,
+    #e91e63 0, #e91e63 40px,
+    #ff9800 40px, #ff9800 80px,
+    #ffd900 80px, #ffd900 120px,
+    #4caf50 120px, #4caf50 160px,
+    #2196f3 160px, #2196f3 200px,
+    #9c27b0 200px, #9c27b0 240px
+  );
+  border-top: 2px solid #2c1810;
+  border-bottom: 2px solid #2c1810;
+}
+
+/* Mystic header — purple velvet, gold stars */
+.header {
+  background:
+    radial-gradient(circle at 14% 30%, #ffc107 2px, transparent 3px),
+    radial-gradient(circle at 84% 22%, #ffc107 2px, transparent 3px),
+    radial-gradient(circle at 30% 78%, #ffc107 1.5px, transparent 2.5px),
+    radial-gradient(circle at 70% 80%, #ffc107 1.5px, transparent 2.5px),
+    linear-gradient(180deg, #4a148c 0%, #2a0a4d 100%);
+  text-align: center;
+  padding: 26px 10px;
+  border-bottom: 4px solid #2c1810;
+  color: #ffc107;
+}
+.header h1 {
+  font-family: 'Georgia', 'Times New Roman', serif;
+  font-style: italic;
+  font-size: 38px;
+  margin: 0;
+  color: #ffc107;
+  text-shadow: 2px 2px 0 #2c1810;
+  letter-spacing: 2px;
+}
+.header .sub {
+  font-family: 'Georgia', serif;
+  font-style: italic;
+  color: #fff8d0;
+  font-size: 14px;
+  margin-top: 6px;
+}
+
+.splash {
+  background:
+    radial-gradient(ellipse at center, #fff8e8 0%, #f0e0c0 100%);
+  text-align: center;
+  padding: 50px 30px;
+  min-height: 360px;
+  font-family: 'Georgia', serif;
+  color: #3a1a5e;
+}
+.splash h2 {
+  font-style: italic;
+  font-size: 22px;
+  margin: 0 0 12px 0;
+  color: #6a1b9a;
+}
+.splash p {
+  font-size: 16px;
+  line-height: 1.7;
+  max-width: 480px;
+  margin: 14px auto;
+}
+.start-btn {
+  font-family: 'Georgia', serif;
+  font-size: 22px;
+  font-style: italic;
+  background: #6a1b9a;
+  color: #ffc107;
+  padding: 16px 40px;
+  border: 3px solid #2c1810;
+  border-radius: 4px;
+  box-shadow: 4px 4px 0 #2c1810;
+  cursor: pointer;
+  margin-top: 18px;
+  letter-spacing: 1px;
+}
+.start-btn:hover { background: #8e24aa; }
+.start-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #2c1810; }
+.audio-note { font-size: 12px; color: #888; margin-top: 18px; }
+
+/* Reading panel — dim parlor */
+.chat-panel {
+  display: none;
+  flex-direction: column;
+  padding: 16px;
+  background:
+    radial-gradient(ellipse at center, #2a0a4d 0%, #150527 100%);
+  height: 70vh;
+  min-height: 460px;
+  max-height: 720px;
+  color: #ffc107;
+}
+.chat-panel.visible { display: flex; }
+
+.phase-banner {
+  background: linear-gradient(90deg, #4a148c, #6a1b9a);
+  color: #ffc107;
+  text-align: center;
+  font-family: 'Georgia', serif;
+  font-style: italic;
+  font-size: 14px;
+  padding: 6px 8px;
+  border: 2px solid #ffc107;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  letter-spacing: 2px;
+}
+.phase-banner.hidden { display: none; }
+
+.chat-log {
+  flex: 1;
+  background: rgba(0,0,0,0.4);
+  border: 2px solid #6a1b9a;
+  padding: 14px;
+  overflow-y: auto;
+  font-family: 'Georgia', serif;
+  font-size: 15px;
+  line-height: 1.7;
+  margin-bottom: 12px;
+  color: #fff8d0;
+  box-shadow: inset 0 0 30px rgba(74, 20, 140, 0.5);
+}
+.msg {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.msg-bot {
+  background: rgba(255, 248, 224, 0.95);
+  color: #2a0a4d;
+  margin-right: 30px;
+  border-left: 4px solid #ffc107;
+  font-style: italic;
+}
+.msg-user {
+  background: rgba(74, 20, 140, 0.7);
+  color: #fff8d0;
+  margin-left: 30px;
+  border-right: 4px solid #ffc107;
+}
+.msg-bot::before {
+  content: 'Madame Claire';
+  display: block;
+  font-weight: bold;
+  font-style: normal;
+  color: #6a1b9a;
+  font-size: 11px;
+  letter-spacing: 2px;
+  margin-bottom: 6px;
+}
+.msg-user::before {
+  content: 'YOU';
+  display: block;
+  font-weight: bold;
+  color: #ffc107;
+  font-size: 11px;
+  letter-spacing: 2px;
+  margin-bottom: 6px;
+}
+
+.typing {
+  font-style: italic;
+  color: #c9a8e6;
+  margin: 6px 4px 12px 4px;
+  font-size: 13px;
+}
+.typing::after {
+  content: ' ...';
+  animation: dots 1.4s steps(4, end) infinite;
+}
+@keyframes dots {
+  0%, 20%   { content: ' .'; }
+  40%       { content: ' ..'; }
+  60%, 100% { content: ' ...'; }
+}
+
+.error {
+  background: rgba(204, 102, 102, 0.3);
+  border: 2px solid #cc6666;
+  color: #ffcccc;
+  padding: 8px 10px;
+  margin: 6px 0;
+  font-size: 13px;
+  border-radius: 4px;
+}
+
+.input-row {
+  display: flex;
+  gap: 8px;
+}
+#user-input {
+  flex: 1;
+  font-family: 'Georgia', serif;
+  font-size: 15px;
+  padding: 11px 12px;
+  border: 2px solid #ffc107;
+  border-radius: 4px;
+  background: rgba(255, 248, 224, 0.95);
+  color: #2a0a4d;
+}
+#user-input:disabled { background: rgba(100,100,100,0.5); color: #aaa; }
+.send-btn {
+  font-family: 'Georgia', serif;
+  font-size: 15px;
+  font-style: italic;
+  background: #ffc107;
+  color: #2a0a4d;
+  padding: 10px 24px;
+  border: 2px solid #2c1810;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+}
+.send-btn:hover { background: #ffeb3b; }
+.send-btn:disabled { background: #777; color: #ccc; cursor: not-allowed; }
+
+.session-end {
+  background: rgba(106, 27, 154, 0.5);
+  border: 2px solid #ffc107;
+  color: #ffc107;
+  padding: 14px;
+  text-align: center;
+  font-style: italic;
+  font-family: 'Georgia', serif;
+  border-radius: 4px;
+  margin: 10px 0;
+  font-size: 15px;
+  letter-spacing: 1px;
+}
+
+.footer-bar {
+  text-align: center;
+  padding: 10px;
+  background: #2c1810;
+  color: #ffd900;
+  font-size: 11px;
+  border-top: 4px solid #2c1810;
+}
+.footer-bar a { color: #ffd900; }
+.footer-bar a:hover { color: #fff; }
+</style>
+</head>
+<body>
+
+<div class="frame">
+
+<div class="stripes-bar"></div>
+
+<div class="header">
+  <h1>~ Madame Claire ~</h1>
+  <div class="sub">Reader of stars &middot; Listener of fates</div>
+</div>
+
+<!-- SPLASH -->
+<div id="splash" class="splash">
+  <h2>The Velvet Parlor</h2>
+  <p>
+    Step into Madame Claire's parlor. The cards are warm. The glass is ready.
+    She has been waiting for you.
+  </p>
+  <p style="font-size:13px; color:#666;">
+    A reading has three parts: the stars, the cards, and the glass.
+    For the cards, you'll be asked to draw three from a real tarot deck and tell her what you got.
+  </p>
+  <button id="start-btn" class="start-btn">Begin the Reading</button>
+  <div class="audio-note">
+    Music will start when you click. Make sure your speakers are on.
+  </div>
+</div>
+
+<!-- READING -->
+<div id="chat-panel" class="chat-panel">
+  <div id="phase-banner" class="phase-banner hidden">THE STARS</div>
+  <div id="chat-log" class="chat-log"></div>
+  <div id="error-area"></div>
+  <div class="input-row">
+    <input id="user-input" type="text" placeholder="Speak when you are ready..." autocomplete="off" maxlength="500" disabled>
+    <button id="send-btn" class="send-btn" disabled>Speak</button>
+  </div>
+</div>
+
+<div class="footer-bar">
+  <a href="../kids-zone.html">&larr; Back to Kids Zone</a>
+</div>
+
+</div>
+
+<audio id="bgm" loop preload="auto" src="TV%20Odyssey%20Games.mp3"></audio>
+
+<script>
+'use strict';
+
+// ===== Config =====
+const CHARACTER = 'claire';
+const HARDCODED_INTRO = "Welcome, dear. Sit. Let me look at you. I'll need two things before we begin. Your name. And your birthday — day, month, and year if you're willing.";
+const END_PHRASE_FRAGMENT = 'wonder what that could mean';
+
+// ===== State =====
+const messages = [];
+let phase = 0; // 0 = before reading, 1 = stars, 2 = cards, 3 = glass, 4 = ended
+let waiting = false;
+let sessionEnded = false;
+
+// ===== DOM =====
+const splash = document.getElementById('splash');
+const chatPanel = document.getElementById('chat-panel');
+const chatLog = document.getElementById('chat-log');
+const errorArea = document.getElementById('error-area');
+const userInput = document.getElementById('user-input');
+const sendBtn = document.getElementById('send-btn');
+const startBtn = document.getElementById('start-btn');
+const bgm = document.getElementById('bgm');
+const phaseBanner = document.getElementById('phase-banner');
+
+startBtn.addEventListener('click', startSession);
+sendBtn.addEventListener('click', submitFromInput);
+userInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    submitFromInput();
+  }
+});
+
+function startSession() {
+  splash.style.display = 'none';
+  chatPanel.classList.add('visible');
+  bgm.volume = 0.3;
+  bgm.play().catch(() => {});
+  // The first message is hardcoded — Claude does NOT generate it.
+  // Per the prompt, this prefaces phase 1 (the stars).
+  appendBubble('bot', HARDCODED_INTRO);
+  setPhaseBanner('THE STARS');
+  phase = 1;
+  setInputEnabled(true);
+  userInput.placeholder = 'Your name and birthday...';
+  userInput.focus();
+}
+
+function setPhaseBanner(text) {
+  phaseBanner.textContent = text;
+  phaseBanner.classList.remove('hidden');
+}
+
+function submitFromInput() {
+  if (waiting || sessionEnded) return;
+  const text = userInput.value.trim();
+  if (!text) return;
+  userInput.value = '';
+  sendMessage(text);
+}
+
+function appendBubble(role, content) {
+  const div = document.createElement('div');
+  div.className = 'msg msg-' + role;
+  div.textContent = content;
+  chatLog.appendChild(div);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+let typingEl = null;
+function showTyping() {
+  hideTyping();
+  typingEl = document.createElement('div');
+  typingEl.className = 'typing';
+  typingEl.textContent = 'Madame Claire is looking';
+  chatLog.appendChild(typingEl);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+function hideTyping() {
+  if (typingEl) { typingEl.remove(); typingEl = null; }
+}
+
+function showError(msg) {
+  errorArea.innerHTML = '';
+  const div = document.createElement('div');
+  div.className = 'error';
+  div.textContent = msg;
+  errorArea.appendChild(div);
+}
+function clearError() { errorArea.innerHTML = ''; }
+
+function setInputEnabled(on) {
+  userInput.disabled = !on;
+  sendBtn.disabled = !on;
+}
+
+async function sendMessage(text) {
+  clearError();
+  appendBubble('user', text);
+  messages.push({ role: 'user', content: text });
+
+  waiting = true;
+  setInputEnabled(false);
+  showTyping();
+
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ character: CHARACTER, messages }),
+    });
+
+    let data;
+    try { data = await resp.json(); }
+    catch { data = { error: 'bad_response' }; }
+
+    hideTyping();
+
+    if (!resp.ok) {
+      messages.pop();
+      const friendly = data && data.message
+        ? data.message
+        : (resp.status === 503
+            ? 'The cards are silent. Tell your GM the API key is missing.'
+            : 'The cards have shifted. Try again.');
+      showError(friendly);
+      return;
+    }
+
+    const reply = (data.reply || '').trim();
+    if (!reply) {
+      messages.pop();
+      showError('Madame Claire is silent. Try again.');
+      return;
+    }
+
+    appendBubble('bot', reply);
+    messages.push({ role: 'assistant', content: reply });
+
+    // Phase progression — the prompt is structured as exactly 6 messages
+    // (UI hardcoded → user → claude → user → claude → user → claude).
+    advancePhase(reply);
+
+    if (reply.toLowerCase().indexOf(END_PHRASE_FRAGMENT) !== -1) {
+      endSession();
+      return;
+    }
+  } catch (e) {
+    hideTyping();
+    messages.pop();
+    showError('The signal is faint. Try again in a moment.');
+  } finally {
+    waiting = false;
+    if (!sessionEnded) {
+      setInputEnabled(true);
+      userInput.focus();
+    }
+  }
+}
+
+function advancePhase(reply) {
+  // Track the phase by counting completed assistant turns.
+  // 1st assistant turn → end of phase 1, entering phase 2 (cards)
+  // 2nd → end of phase 2, entering phase 3 (glass)
+  // 3rd → end of phase 3 (final vision)
+  const assistantTurns = messages.filter(m => m.role === 'assistant').length;
+  if (assistantTurns === 1) {
+    phase = 2;
+    setPhaseBanner('THE CARDS');
+    userInput.placeholder = 'Tell her the three cards you drew...';
+  } else if (assistantTurns === 2) {
+    phase = 3;
+    setPhaseBanner('THE GLASS');
+    userInput.placeholder = 'Speak when you are ready...';
+  }
+}
+
+function endSession() {
+  sessionEnded = true;
+  setInputEnabled(false);
+  userInput.placeholder = 'The reading is complete.';
+  setPhaseBanner('THE READING IS COMPLETE');
+  const div = document.createElement('div');
+  div.className = 'session-end';
+  div.textContent = '✦ The reading is over. Madame Claire blinks. ✦';
+  chatLog.appendChild(div);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+</script>
+
+</body>
+</html>
