@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<title>~* TV ODYSSEY KIDS ZONE *~</title>
+<!-- Site:    Kids Zone v1.12 -->
+<!-- Host:    localhost / KIOSK-03 / SITE\ -->
+<!-- Built:   E. Vasquez, K. Osei -->
+<!-- Updated: 03/04/1996 -->
+<style>
+body {
+  background-color: #ffd900;
+  background-image:
+    repeating-linear-gradient(45deg, transparent 0, transparent 18px, rgba(255,255,255,0.35) 18px, rgba(255,255,255,0.35) 19px),
+    radial-gradient(circle at 8% 18%, #ff5722 7px, transparent 8px),
+    radial-gradient(circle at 84% 64%, #2196f3 6px, transparent 7px),
+    radial-gradient(circle at 28% 82%, #4caf50 7px, transparent 8px),
+    radial-gradient(circle at 68% 22%, #9c27b0 6px, transparent 7px);
+  font-family: 'Comic Sans MS', 'Comic Sans', 'Marker Felt', cursive, sans-serif;
+  color: #2c1810;
+  margin: 0;
+  padding: 16px 10px;
+}
+a { color: #2196f3; }
+a:hover { color: #e91e63; }
+a:visited { color: #9c27b0; }
+
+.wrapper {
+  width: 720px;
+  margin: 0 auto;
+  background-color: #fff;
+  border: 4px solid #2c1810;
+  box-shadow: 8px 8px 0 #2c1810;
+}
+
+.stripes-bar {
+  height: 22px;
+  background: repeating-linear-gradient(
+    to right,
+    #e91e63 0, #e91e63 40px,
+    #ff9800 40px, #ff9800 80px,
+    #ffd900 80px, #ffd900 120px,
+    #4caf50 120px, #4caf50 160px,
+    #2196f3 160px, #2196f3 200px,
+    #9c27b0 200px, #9c27b0 240px
+  );
+  border-top: 2px solid #2c1810;
+  border-bottom: 2px solid #2c1810;
+}
+
+.wobble-bar {
+  height: 14px;
+  background-image:
+    radial-gradient(circle at 10px 14px, #e91e63 8px, transparent 9px),
+    radial-gradient(circle at 30px 0, #ff9800 8px, transparent 9px),
+    radial-gradient(circle at 50px 14px, #4caf50 8px, transparent 9px),
+    radial-gradient(circle at 70px 0, #2196f3 8px, transparent 9px),
+    radial-gradient(circle at 90px 14px, #9c27b0 8px, transparent 9px);
+  background-size: 100px 14px;
+  background-color: #fff;
+}
+
+.header {
+  background-color: #ffd900;
+  text-align: center;
+  padding: 22px 0 18px 0;
+  border-bottom: 4px solid #2c1810;
+}
+.header h1 {
+  font-family: 'Comic Sans MS', cursive;
+  font-size: 40px;
+  color: #e91e63;
+  margin: 0;
+  text-shadow: 3px 3px 0 #2196f3, 6px 6px 0 #2c1810;
+  display: inline-block;
+  animation: wobble 3.4s ease-in-out infinite;
+}
+@keyframes wobble {
+  0%, 100% { transform: rotate(-2.4deg); }
+  50%      { transform: rotate(2.4deg); }
+}
+.header .tagline {
+  font-size: 16px;
+  color: #2c1810;
+  margin-top: 10px;
+  font-style: italic;
+}
+.header .stars {
+  color: #e91e63;
+  letter-spacing: 4px;
+  font-size: 18px;
+}
+
+.marquee-row {
+  background-color: #2196f3;
+  color: #ffd900;
+  padding: 6px 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: bold;
+  border-bottom: 3px solid #2c1810;
+}
+.marquee-row span {
+  display: inline-block;
+  animation: marquee 22s linear infinite;
+  padding-left: 100%;
+}
+@keyframes marquee {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-100%); }
+}
+
+.nav {
+  display: flex;
+  background-color: #fff;
+  border-bottom: 4px solid #2c1810;
+}
+.nav-tab {
+  flex: 1;
+  text-align: center;
+  padding: 14px 0;
+  font-family: 'Comic Sans MS', cursive;
+  font-size: 22px;
+  font-weight: bold;
+  background-color: #ffd900;
+  color: #2c1810 !important;
+  border-right: 3px solid #2c1810;
+  cursor: pointer;
+  text-decoration: none;
+  user-select: none;
+}
+.nav-tab:last-child { border-right: none; }
+.nav-tab.active { background-color: #e91e63; color: #fff !important; }
+.nav-tab:hover { background-color: #ff9800; }
+
+.section { display: none; padding: 22px 28px; min-height: 360px; }
+.section.active { display: block; }
+
+.section h2 {
+  text-align: center;
+  color: #e91e63;
+  font-size: 30px;
+  margin: 4px 0 14px 0;
+  text-shadow: 2px 2px 0 #ffd900;
+}
+
+.intro-row {
+  text-align: center;
+  margin: 14px 0 20px 0;
+}
+.intro-row .placeholder-img {
+  width: 220px; height: 130px;
+  font-size: 11px;
+}
+
+.placeholder-img {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: repeating-linear-gradient(45deg, #ffd900 0 12px, #ff9800 12px 24px);
+  border: 2px solid #2c1810;
+  color: #2c1810;
+  font-family: 'Comic Sans MS', cursive;
+  font-weight: bold;
+  text-align: center;
+  padding: 4px;
+  box-sizing: border-box;
+}
+
+.parents-note {
+  background-color: #fff8d0;
+  border: 3px dashed #e91e63;
+  padding: 12px 14px;
+  margin: 18px 0 8px 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.parents-note b.shout {
+  color: #e91e63;
+  font-size: 15px;
+  letter-spacing: 1px;
+}
+
+.cards-row {
+  text-align: center;
+  margin-top: 8px;
+}
+.character-card, .game-card {
+  display: inline-block;
+  width: 280px;
+  margin: 14px 8px;
+  vertical-align: top;
+  background-color: #fff8d0;
+  border: 3px solid #2c1810;
+  box-shadow: 5px 5px 0 #2196f3;
+  padding: 14px;
+  text-align: center;
+}
+.game-card { box-shadow: 5px 5px 0 #4caf50; }
+
+.character-card h3, .game-card h3 {
+  margin: 0 0 8px 0;
+  font-family: 'Comic Sans MS', cursive;
+  color: #e91e63;
+  font-size: 22px;
+}
+.card-art {
+  width: 100%;
+  height: 130px;
+  background: repeating-linear-gradient(45deg, #ffd900 0 12px, #ff9800 12px 24px);
+  border: 2px solid #2c1810;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 64px;
+  margin-bottom: 10px;
+  box-sizing: border-box;
+}
+.card-blurb {
+  font-size: 12px;
+  color: #2c1810;
+  min-height: 60px;
+  margin: 0 0 10px 0;
+}
+.card-button {
+  display: inline-block;
+  background-color: #4caf50;
+  color: #fff !important;
+  padding: 8px 20px;
+  text-decoration: none !important;
+  border: 3px solid #2c1810;
+  font-family: 'Comic Sans MS', cursive;
+  font-size: 16px;
+  font-weight: bold;
+  border-radius: 10px;
+  margin-top: 4px;
+  box-shadow: 3px 3px 0 #2c1810;
+}
+.card-button:hover { background-color: #ff5722; }
+.card-button:active {
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 #2c1810;
+}
+
+.footer {
+  background-color: #2c1810;
+  color: #ffd900;
+  text-align: center;
+  font-size: 11px;
+  padding: 14px;
+  border-top: 4px solid #2c1810;
+  line-height: 1.6;
+}
+.footer .host {
+  color: #888;
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+}
+
+.glitter {
+  display: inline-block;
+  animation: blink 1.4s steps(2,end) infinite;
+  color: #e91e63;
+}
+@keyframes blink { 50% { opacity: 0; } }
+</style>
+<script>
+function showZoneTab(name) {
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  var tab = document.querySelector('.nav-tab[data-tab="'+name+'"]');
+  if (tab) tab.classList.add('active');
+  var sec = document.getElementById('section-'+name);
+  if (sec) sec.classList.add('active');
+}
+</script>
+<script>
+/* Records this site in the gateway's bookmarks list. */
+(function(){
+  try {
+    var KEY = 'arg_bookmarks_v1', slug = 'kids-zone';
+    var list = [];
+    try { list = JSON.parse(localStorage.getItem(KEY)) || []; } catch(e) {}
+    if (!Array.isArray(list)) list = [];
+    list = list.filter(function(s){ return typeof s === 'string' && s !== slug; });
+    list.unshift(slug);
+    if (list.length > 20) list = list.slice(0, 20);
+    localStorage.setItem(KEY, JSON.stringify(list));
+  } catch(e) {}
+})();
+</script>
+</head>
+<body>
+
+<div class="wrapper">
+
+<div class="stripes-bar"></div>
+<div class="wobble-bar"></div>
+
+<div class="header">
+  <h1>~* TV ODYSSEY KIDS ZONE *~</h1>
+  <div class="tagline">where the fun NEVER stops!</div>
+  <div class="stars">&#9733; &#9733; &#9733; &#9733; &#9733;</div>
+</div>
+
+<div class="marquee-row">
+  <span>&#9733; HEY KIDS!! Tell mom and dad about all your favorite Odyssey friends! &nbsp;&bull;&nbsp; New games every week! &nbsp;&bull;&nbsp; Always ask permission before going online! &nbsp;&bull;&nbsp; Mr. Know It All wants to hear from YOU! &nbsp;&bull;&nbsp; Madame Claire is ready to read your future! &nbsp;&bull;&nbsp; &#9733;</span>
+</div>
+
+<nav class="nav">
+  <a class="nav-tab active" data-tab="home"  href="#" onclick="showZoneTab('home');return false;">HOME</a>
+  <a class="nav-tab"        data-tab="chat"  href="#" onclick="showZoneTab('chat');return false;">CHAT</a>
+  <a class="nav-tab"        data-tab="games" href="#" onclick="showZoneTab('games');return false;">GAMES</a>
+</nav>
+
+<!-- HOME -->
+<div id="section-home" class="section active">
+  <h2>Welcome to the Kids Zone!</h2>
+
+  <p style="font-size:15px; line-height:1.65; text-align:center;">
+    Hi there, kid! Step right up to the BIGGEST and BRIGHTEST corner of the
+    whole TV Odyssey universe! Hang out with all of your favorite friends
+    from the channel, play awesome games, and have a TON of fun!
+    <span class="glitter">&#9733;</span>
+  </p>
+
+  <div class="intro-row">
+    <span class="placeholder-img">tv-odyssey-mascot.gif<br>(MASCOT WAVING HELLO!!)</span>
+  </div>
+
+  <p style="font-size:14px; line-height:1.6; text-align:center;">
+    What can you do here?
+    <br><br>
+    &#10004; <b>CHAT</b> with Mr. Know It All and Madame Claire!<br>
+    &#10004; Play <b>GAMES</b> like Captain Planet Saves the Day and Escape Basement World!<br>
+    &#10004; Send your high scores in to win cool prizes!<br>
+  </p>
+
+  <div class="parents-note">
+    <b class="shout">HEY GROWN-UPS!</b><br>
+    The Kids Zone is a free, locally-produced entertainment resource brought
+    to you by WDLK-TV and the Deep Lake community. We strongly recommend that
+    children have <b>parental permission</b> before going online or using
+    interactive features such as our chat rooms and game high-score boards.
+    Please review our <a href="#">privacy guidelines</a> with your child
+    before they participate. Together we can make sure the Internet is a
+    safe and fun place for everyone!
+  </div>
+</div>
+
+<!-- CHAT -->
+<div id="section-chat" class="section">
+  <h2>Chat With Your Favorite Friends!</h2>
+  <p style="text-align:center; font-size:13px;">
+    Click a friend below to start chatting! &nbsp;Remember the
+    <b>Three Big Rules</b>: never share your real name, never share your
+    school, and never share your address!
+  </p>
+
+  <div class="cards-row">
+    <div class="character-card">
+      <div class="card-art">&#127922;</div>
+      <h3>Mr. Know It All</h3>
+      <p class="card-blurb">
+        The smartest fellow on the block! Got a question? He's got an
+        answer. Test his trivia &mdash; he NEVER gets one wrong!
+      </p>
+      <a class="card-button" href="kids-zone-knowitall.html">Talk to Mr. K!</a>
+    </div>
+
+    <div class="character-card">
+      <div class="card-art">&#128302;</div>
+      <h3>Madame Claire</h3>
+      <p class="card-blurb">
+        She gazes deep into her crystal ball and tells you what's
+        coming! Find out what the future has in store for YOU!
+      </p>
+      <a class="card-button" href="kids-zone-claire.html">Visit the Madame!</a>
+    </div>
+  </div>
+</div>
+
+<!-- GAMES -->
+<div id="section-games" class="section">
+  <h2>Game Room!</h2>
+  <p style="text-align:center; font-size:13px;">
+    Pick your adventure! Two AWESOME games &mdash; pick one and dive in!
+  </p>
+
+  <div class="cards-row">
+    <div class="game-card">
+      <div class="card-art">&#127757;</div>
+      <h3>Captain Planet Saves the Day!</h3>
+      <p class="card-blurb">
+        Pollution Man is up to his old tricks! Help Captain Planet clean
+        up the mess and save the day in 8 EXCITING stages!
+      </p>
+      <a class="card-button" href="kids-zone-planet.html">Play Now!</a>
+    </div>
+
+    <div class="game-card">
+      <div class="card-art">&#128682;</div>
+      <h3>Escape Basement World</h3>
+      <p class="card-blurb">
+        Lost in the maze of staircases and hallways? Find the right door
+        and make it back to the surface!
+      </p>
+      <a class="card-button" href="kids-zone-basement.html">Play Now!</a>
+    </div>
+  </div>
+</div>
+
+<div class="wobble-bar"></div>
+<div class="stripes-bar"></div>
+
+<div class="footer">
+  &copy; 1996 WDLK Broadcasting Inc. &bull; TV ODYSSEY KIDS ZONE v1.12<br>
+  All characters &amp; programs &copy; their respective creators &bull;
+  Site best viewed in Netscape Navigator 3.0 at 800x600<br>
+  <span class="host">localhost / KIOSK-03 / SITE\</span>
+</div>
+
+</div>
+
+</body>
+</html>
