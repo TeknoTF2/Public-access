@@ -512,7 +512,30 @@ other on session 4. Pick a ruling per table; record it.
   - Username: `Raymond Calloway` (case-insensitive)
   - PIN: `4178` (the last four of Calloway's SSN)
   - In Notepad, type any text containing the substring `odyssey`
-    → ACCESS GRANTED screen.
+    → ACCESS GRANTED screen → real desktop (after ~3s pause).
+- **Real desktop (post-Access Granted)** — only two icons:
+  - **Files** opens an in-terminal file explorer rooted at
+    `C:\KIOSK-03\`. Tree shows `SITE\` (the running Kids Zone
+    mirror, not browsable from the explorer), `DOCS\` (18 .TXT
+    files), and `ACCESS.LOG` at the kiosk root. Click any file to
+    read its contents. Files are listed roughly chronologically by
+    in-fiction date; the access log spans 06/15/1996 → 02/14/2004.
+  - **Local Server** opens `kids-zone.html` in a new tab — the
+    locally-mirrored TV Odyssey Kids Zone. The Kids Zone is the
+    *containment surface* per `PROTOCOL.TXT` and `IR_003`/`IR_004`
+    — keeping that page running on the kiosk is what holds Mr.
+    Know It All, Madame Claire, the Pollution Man smog, and
+    Basement World inside their respective boundaries.
+- **Kids Zone** (`kids-zone.html`) — three tabs:
+  - **Home** — period-style "welcome to the Kids Zone" landing.
+  - **Chat** — links to `kids-zone-knowitall.html` and
+    `kids-zone-claire.html` (game stubs — to be implemented).
+  - **Games** — links to `kids-zone-planet.html` (Captain Planet
+    Saves the Day) and `kids-zone-basement.html` (Escape Basement
+    World) (game stubs — to be implemented).
+  Slug `kids-zone` is added to the gateway bookmarks bar on first
+  visit, but the page is **not** in the search index — the only
+  intended path to it is via the terminal's Local Server icon.
 - **Hidden WDLK-TV staff page**: visit `wdlk-tv.html#staff` or
   `wdlk-tv.html?page=staff`. Also reachable from the schedule's
   Friday-midnight `S/T-7` cell.

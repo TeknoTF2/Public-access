@@ -486,6 +486,161 @@ body {
     opacity: 0;
   }
 }
+
+/* ===== REAL DESKTOP (post-Access Granted) ===== */
+#real-desktop-screen {
+  flex-direction: column;
+  background: #0c3318;
+  background-image: radial-gradient(ellipse at center, #0f4020 0%, #071a0e 100%);
+  font-family: 'Share Tech Mono', 'VT323', monospace;
+}
+
+/* ===== FILE EXPLORER WINDOW ===== */
+.explorer-window {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(900px, 92vw);
+  height: min(580px, 84vh);
+  background: #060e08;
+  border: 2px solid #33ff33;
+  box-shadow: 0 0 30px rgba(51,255,51,0.1), inset 0 0 40px rgba(0,0,0,0.5);
+  z-index: 60;
+  display: none;
+  flex-direction: column;
+}
+.explorer-window.visible { display: flex; }
+
+.explorer-titlebar {
+  background: #1a5c2a;
+  padding: 4px 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  color: #0a0a0a;
+  font-weight: bold;
+  letter-spacing: 1px;
+  flex-shrink: 0;
+}
+.explorer-close {
+  cursor: pointer;
+  font-size: 14px;
+  color: #0a0a0a;
+  font-weight: bold;
+  padding: 0 4px;
+}
+.explorer-close:hover { color: #ff3333; }
+
+.explorer-menubar {
+  background: #0a1f10;
+  padding: 2px 8px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  color: #1a5c2a;
+  border-bottom: 1px solid #1a3a20;
+  flex-shrink: 0;
+}
+.explorer-menubar span { margin-right: 16px; cursor: default; }
+
+.explorer-toolbar {
+  background: #0a1f10;
+  padding: 4px 10px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  color: #99ff99;
+  border-bottom: 1px solid #1a3a20;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.explorer-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.explorer-tree {
+  width: 280px;
+  background: #060e08;
+  border-right: 1px solid #1a3a20;
+  overflow: auto;
+  padding: 8px 0;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  color: #33ff33;
+  text-shadow: 0 0 3px rgba(51,255,51,0.3);
+  flex-shrink: 0;
+}
+
+.tree-folder {
+  display: block;
+  padding: 3px 8px;
+  color: #66ff66;
+  font-weight: bold;
+}
+.tree-folder.indent-1 { padding-left: 22px; }
+.tree-folder.indent-2 { padding-left: 36px; }
+.tree-folder-note {
+  display: block;
+  padding-left: 50px;
+  color: #1a5c2a;
+  font-size: 11px;
+  font-style: italic;
+}
+.tree-file {
+  display: block;
+  padding: 2px 8px 2px 50px;
+  cursor: pointer;
+  color: #33ff33;
+  text-decoration: none;
+}
+.tree-file.indent-root { padding-left: 36px; }
+.tree-file:hover { background: #0d2a14; color: #99ff99; }
+.tree-file.active { background: #1a5c2a; color: #d4ffd4; }
+
+.explorer-viewer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: #060e08;
+}
+.explorer-viewer-header {
+  background: #0a1f10;
+  padding: 4px 10px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  color: #99ff99;
+  border-bottom: 1px solid #1a3a20;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.explorer-viewer-body {
+  flex: 1;
+  overflow: auto;
+  margin: 0;
+  padding: 12px 14px;
+  font-family: 'VT323', 'Share Tech Mono', monospace;
+  font-size: 16px;
+  color: #33ff33;
+  text-shadow: 0 0 3px rgba(51,255,51,0.3);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.4;
+}
+.explorer-viewer-empty {
+  text-align: center;
+  padding: 40px;
+  color: #1a5c2a;
+  font-style: italic;
+}
 </style>
 <script>
 /* Records this site in the gateway's bookmarks list. Hidden site:
@@ -605,10 +760,53 @@ body {
   <!-- ACCESS GRANTED SCREEN -->
   <div class="screen" id="granted-screen">
     <div class="granted-text">ACCESS GRANTED</div>
-    <div class="granted-sub">ESTABLISHING CONNECTION TO REMOTE HOST...</div>
+    <div class="granted-sub">MOUNTING C:\KIOSK-03 ...</div>
+  </div>
+
+  <!-- ===== REAL DESKTOP (post-Access Granted) ===== -->
+  <div class="screen" id="real-desktop-screen">
+    <div class="desktop-icons">
+      <div class="desktop-icon" onclick="openFileExplorer()">
+        <div class="icon-glyph">&#128193;</div>
+        <div class="icon-label">Files</div>
+      </div>
+      <div class="desktop-icon" onclick="openLocalServer()">
+        <div class="icon-glyph">&#127760;</div>
+        <div class="icon-label">Local Server</div>
+      </div>
+    </div>
+
+    <!-- File Explorer Window -->
+    <div class="explorer-window" id="explorer-window">
+      <div class="explorer-titlebar">
+        <span>FILE EXPLORER &mdash; C:\KIOSK-03</span>
+        <span class="explorer-close" onclick="closeFileExplorer()">X</span>
+      </div>
+      <div class="explorer-menubar">
+        <span>File</span><span>Edit</span><span>View</span><span>Help</span>
+      </div>
+      <div class="explorer-toolbar" id="explorer-path">C:\KIOSK-03</div>
+      <div class="explorer-body">
+        <div class="explorer-tree" id="explorer-tree"></div>
+        <div class="explorer-viewer">
+          <div class="explorer-viewer-header" id="explorer-viewer-header">No file selected</div>
+          <pre class="explorer-viewer-body" id="explorer-viewer-body"><div class="explorer-viewer-empty">Select a file from the tree to view its contents.</div></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- Taskbar -->
+    <div class="taskbar">
+      <button class="start-btn" onclick="alert('Start menu unavailable on this terminal.')">&#9654; START</button>
+      <span class="taskbar-clock">07/29/1996 11:58 PM</span>
+    </div>
   </div>
 
 </div>
+
+<script type="application/json" id="kiosk-files-data">
+{"MEMO_001.TXT":"INTERNAL MEMORANDUM — WDLK BROADCASTING INC.\nNOT FOR DISTRIBUTION\n\nDATE:    02/06/1996\nFROM:    D. Rourke, Technical\nTO:      All Staff\nRE:      Kids Zone — Service Termination\n\nPer Calloway, the Kids Zone page at the UO mirror comes\ndown on 02/15. Part of the wind-down.\n\nVasquez — send the takedown to UO. Keep it simple,\nwe're restructuring, thanks for the hosting.\n\nMarsh — pull the phone-in logs for Know It All and\nClaire before the 15th. Names and addresses go in the\nburn box.\n\nOsei — archive the modules to tape before the mirror\ngoes. Standard backup, label it, file it.\n\nSchedule is unchanged through March. Nothing else\nchanges until I say so.\n\n                                        — D.R.","MEMO_002.TXT":"INTERNAL MEMORANDUM — WDLK BROADCASTING INC.\n\nDATE:    02/19/1996\nFROM:    T. Marsh, Operations\nTO:      D. Rourke\nRE:      0034-A / 0034-B — possible breakout\n\nDale,\n\nHenderson called. His daughter found a setup in the\nclearing east of 14500 — painted arch, booth, no\ntracks. He went back Sunday and it was clean.\n\nDescription matches both assets. Arch is consistent\nwith 0034-A. Booth is consistent with 0034-B.\n\nThis is four days after the site came down. We should\nhave flagged these two before pulling the page. That's\non us.\n\nHow do you want to handle? The assets have never\nco-located before.\n\n                                        — T.","GM_001.TXT":"INTERNAL MEMORANDUM — WDLK BROADCASTING INC.\n\nDATE:    02/22/1996\nFROM:    T. Marsh, Operations\nTO:      D. Rourke\nRE:      0034-C — mine status\n\nDale,\n\nDrove up the logging road to check on the cave. The\nsmog has moved past the mine entrance. It's about 200\nyards down the road now. It was at the mouth last week.\n\nWith the site down there's nothing holding it inside.\nIf it keeps moving at this rate it reaches the 14200\nlot by mid-March and town by April.\n\nAlso — the 847 property. The Lakeshore basement is\nback to its original layout. Bedroom, bathroom, the\nwhole apartment. Whoever does the next showing is\ngoing to have questions about a finished basement\nthat isn't in the listing.\n\nBoth of these are because the games came down with\nthe rest of the site. We knew the smog would spread.\nWe didn't think about 847.\n\n                                        — T.","MEMO_003.TXT":"INTERNAL MEMORANDUM — WDLK BROADCASTING INC.\n\nDATE:    03/02/1996\nFROM:    E. Vasquez, Production\nTO:      D. Rourke\nCC:      T. Marsh\nRE:      0034-A — civilian contact (confirmed)\n\nDale,\n\nWeyerhaeuser foreman called looking for Calloway. Three\nof his crew went up the fire road past 14500 on 02/27\nand didn't come back. Truck found on the road, keys in\nit, lunches on the seats. Dogs lost them in the clearing.\n\nOne of the missing men radioed dispatch at 2:15 and said\n\"there's a carnival out here.\" Nothing after that.\n\nThis is not a sighting. This is contact. Three missing.\n\nWe need to move on this. The longer 0034-A is active\nwithout a boundary the worse this gets. You know the\npattern.\n\n                                        — E.","GM_002.TXT":"INTERNAL MEMORANDUM — WDLK BROADCASTING INC.\n\nDATE:    03/05/1996\nFROM:    E. Vasquez, Production\nTO:      D. Rourke\nRE:      0034-C — smog advance\n\nDale,\n\nThe smog is at 400 yards now. I could smell it from\nthe 14200 parking area this morning. Sulfur. Strong\nenough that a civilian would notice.\n\nWe need the games on the terminal with the modules.\nOsei is already doing the rebuild. Captain Planet and\nBasement World go up with everything else.\n\nThe smog goes back in the cave when the game is\nrunning. The 847 rooms go away when the maze is\nrunning. Both problems solved.\n\nAnd yes, I know what it means to put Basement World\nback up on purpose. We'd be using it. Hiding those\nrooms deliberately. Calloway should weigh in on that\nbut I don't think we have time to wait — the smog\nis the more immediate problem and the games go up\ntogether.\n\n                                        — E.","IR_003.TXT":"================================================================\n          WDLK BROADCASTING INC. — INCIDENT REPORT\n================================================================\n\n  REPORT ID:       IR-1996-PM-01\n  DATE OF REPORT:  03/08/1996\n  FILED BY:        E. Vasquez\n  CLASSIFICATION:  INTERNAL ONLY\n\n================================================================\n\n  SUBJECT:         Program Asset #0034-C (Captain Planet\n                   Saves the Day / Pollution Man)\n                   Unbound Manifestation — Active\n\n  STANDARD BEHAVIOR (game running on site, pre-02/15):\n\n  0034-C manifests as a dense, low-lying chemical smog\n  occupying the interior of the mine complex at the\n  end of the logging road past 14500 Route 7. Smog is\n  yellow-grey, acrid, consistent with concentrated\n  sulfur dioxide. While the game was hosted on the\n  Kids Zone site, the smog remained entirely within\n  the cave system. It did not advance past the mine\n  entrance. The cave was inaccessible due to the smog\n  but the manifestation posed no risk to the\n  surrounding area.\n\n  CURRENT STATUS (site offline since 02/15):\n\n  Without the game running as a boundary, the smog is\n  no longer contained to the cave interior. It has been\n  advancing down the logging road toward town.\n\n  Observed positions:\n    02/16 — at mine entrance (standard position)\n    02/22 — 200 yards past entrance (Marsh, on-site)\n    03/01 — retreated to ~100 yards, then resumed\n    03/05 — 400 yards, detectable by smell from 14200\n    03/08 — approximately 500 yards, visible from the\n            fire road turnoff\n\n  Rate of advance is not constant. Two brief retreats\n  observed (03/01, 03/03) before resumption. At current\n  rate the smog reaches the 14200 parcel by mid-March\n  and the Route 7 junction by mid-April. Civilian\n  exposure at that point is unavoidable.\n\n  NOTES ON THE MINE COMPLEX:\n\n  The cave system predates WDLK operations. It is not\n  a WDLK asset. 0034-C's manifestation occupies it\n  but did not originate from it. The smog sits between\n  the road and whatever is inside. While the game is\n  running, the smog holds position in the cave —\n  effectively sealing the mine from access. The cave\n  has not been entered since operations began.\n\n  The mine is relevant to the Origin. This is not in\n  dispute. Pollution Man's placement there is\n  consistent with the other anchored manifestations.\n  Clearing the smog permanently would require beating\n  the game. The implications of accessing the Origin\n  site are beyond the scope of this report.\n\n  PRIORITY:\n\n  Restore Captain Planet to the KIOSK-03 terminal to\n  re-contain the smog to the cave interior. This is\n  being handled as part of Osei's full site rebuild.\n\n================================================================","IR_004.TXT":"================================================================\n          WDLK BROADCASTING INC. — INCIDENT REPORT\n================================================================\n\n  REPORT ID:       IR-1996-BW-01\n  DATE OF REPORT:  03/08/1996\n  FILED BY:        T. Marsh\n  CLASSIFICATION:  INTERNAL ONLY\n\n================================================================\n\n  SUBJECT:         Program Asset #0034-D (Escape Basement\n                   World)\n                   Unbound State — Spatial Restoration\n\n  STANDARD BEHAVIOR (game running on site, pre-02/15):\n\n  While the Escape Basement World game was hosted on\n  the Kids Zone site, 0034-D suppressed physical\n  access to the following spaces:\n\n  14200 Route 7 (WDLK station):\n  Basement entrance — door, stairwell, and full\n  subterranean structure — does not exist while game\n  is running. Wall where the door should be is\n  continuous drywall, no seam, no frame. Foundation\n  inspection from exterior shows no void beneath the\n  building. The basement is not hidden. It is absent.\n\n  847 Lakeshore Drive:\n  Basement access remains via interior stairwell.\n  Layout is reduced. The finished basement apartment\n  — bedroom, bathroom, and connecting hall — is\n  absent while game is running. Remaining space is a\n  single open room consistent with an unfinished\n  basement. Walls where the bedroom and bathroom\n  entries should be are poured concrete, continuous,\n  no seams.\n\n  CURRENT STATUS (site offline since 02/15):\n\n  With the game no longer running, both spaces have\n  returned to their original, unmodified state.\n\n  14200: Basement door, stairwell, and full structure\n  are present and accessible.\n\n  847: Full basement apartment is present — bedroom,\n  bathroom, connecting hall, all finished.\n\n  ASSESSMENT:\n\n  0034-D does not produce a dangerous manifestation.\n  It produces an absence. While running, it removes\n  spaces. While offline, the spaces return.\n\n  This has been operationally useful. The game has\n  been used since its deployment on the original\n  Kids Zone site to deny access to both basements.\n  The station basement contains materials relevant to\n  ongoing operations. The 847 basement apartment is\n  part of the property cycle and its visibility\n  creates complications during tenant turnover.\n\n  RECOMMENDATION:\n\n  Restore Escape Basement World to KIOSK-03 as part\n  of the site rebuild. Resume suppression of both\n  basement spaces. The current exposed state of the\n  847 basement is a liability if the property goes\n  to market before the game is restored.\n\n  NOTE:\n\n  Deliberately using 0034-D as a concealment tool is\n  a policy decision, not a containment decision. The\n  asset is not dangerous when unbound — the spaces\n  simply come back. Restoring the game specifically\n  to hide the basements is an active operational\n  choice. This should be acknowledged and authorized\n  by Calloway.\n\n================================================================","MEMO_004.TXT":"INTERNAL MEMORANDUM — WDLK BROADCASTING INC.\n\nDATE:    03/11/1996\nFROM:    K. Osei, Production\nTO:      D. Rourke\nRE:      0034-B — civilian contact + event\n\nMrs. Alderman came in asking about a fortune teller\nher son visited in the woods. David is 11. He came\nhome saying a woman told him his school would burn.\n\nAlderman Elementary had an electrical fire this morning.\nEast wing is out.\n\nThat's 0034-B running live with no boundary on a child.\nThis can't wait for Calloway to make a decision. The\nbackup tapes are in the archive room. I can have the\nmodules rebuilt on a local box in two days. Three if\nyou want me to test them before we go hot.\n\nLet me know.\n\n                                        — K.","MEMO_005.TXT":"INTERNAL MEMORANDUM — WDLK BROADCASTING INC.\n\nDATE:    03/14/1996\nFROM:    D. Rourke, Technical\nTO:      R. Calloway\nRE:      0034-A/B — requesting authorization\n\nRay,\n\nWe have three missing via 0034-A and a structure fire\nvia 0034-B. One juvenile contact confirmed on each.\nOsei says she can have the modules back up on a local\nbox by the 17th.\n\nI went to the clearing on the 12th. Nothing. Went back\non the 13th with Wentworth. Both assets were present.\n0034-A engaged us on approach. It used Harold's name\nby the third question.\n\nI need authorization to proceed with local deployment.\nI also need Wentworth to get the council to condemn the\nbuilding. We need a perimeter before this goes any\nfurther.\n\nSeparately — 0034-A has never produced casualties\nbefore. The prior breakouts were manageable. This is\ndifferent. Whatever changed in the transition from\nhosted to unbound, the severity is escalating. I don't\nwant to find out what week three looks like.\n\n                                        — D.","IR_001.TXT":"================================================================\n          WDLK BROADCASTING INC. — INCIDENT REPORT\n================================================================\n\n  REPORT ID:       IR-1996-MKI-01\n  DATE OF REPORT:  03/22/1996\n  FILED BY:        D. Rourke\n  CLASSIFICATION:  INTERNAL ONLY\n\n================================================================\n\n  SUBJECT:         Program Asset #0034-A (Mr. Know It All)\n                   Unbound Manifestation — Active\n\n  PHYSICAL DESCRIPTION:\n\n  Wooden arcade front-piece, ~9 ft tall, ~12 ft wide.\n  Central feature: oversized carved head, clown-like\n  paint, open mouth (~3 ft diameter), articulated eyes\n  on lateral mechanical track. Consistent with on-air\n  depiction. Structure appears in clearing 300 yds east\n  of 14500 Route 7 fire road. Present on ~60% of site\n  visits. No physical evidence between appearances.\n\n  OBSERVED INTERACTION (03/18/1996, Rourke + Wentworth):\n\n  Vocal engagement initiated at ~30 ft approach. Male\n  voice, consistent with broadcast character.\n\n  Q1: \"What year was Oregon admitted to the Union?\"\n  Q2: \"What is the name of the elementary school on\n       Fir Street in Deep Lake?\"\n  Q3: \"Harold, what did you tell your wife about where\n       you are right now?\"\n\n  Subjects withdrew after Q3. Voice continued at\n  increasing speed for ~4 minutes after withdrawal.\n  Question content not recorded.\n\n  ATTRIBUTED LOSSES:\n\n  02/27/1996 — Three Weyerhaeuser contractors. Missing.\n  03/09/1996 — One juvenile male, 14. Last seen Route 7\n  eastbound after school. Missing.\n\n  No remains or personal effects recovered at site.\n\n  SEVERITY ASSESSMENT:\n\n  Prior unbound events involving 0034-A did not produce\n  casualties. Current event has produced four missing in\n  22 days. Escalation is consistent with extended\n  unbound duration. Re-containment is urgent.\n\n================================================================","IR_002.TXT":"================================================================\n          WDLK BROADCASTING INC. — INCIDENT REPORT\n================================================================\n\n  REPORT ID:       IR-1996-MC-01\n  DATE OF REPORT:  03/28/1996\n  FILED BY:        E. Vasquez\n  CLASSIFICATION:  INTERNAL ONLY\n\n================================================================\n\n  SUBJECT:         Program Asset #0034-B (Madame Claire)\n                   Unbound Manifestation — Active\n\n  PHYSICAL DESCRIPTION:\n\n  Tent/booth, dark fabric over lightweight frame. Table,\n  two chairs, unlit oil lamp. Seated figure presenting\n  as female, age indeterminate, layered clothing, head\n  covering. Face partially obscured. Voice consistent\n  with broadcast character. Located ~40 ft south of\n  0034-A when co-present. Presence does not correlate\n  with 0034-A — either may appear independently.\n\n  No direct staff interaction conducted. Data from\n  two juvenile witnesses.\n\n  WITNESS 1 (Alderman boy, age 11, see MEMO_004):\n  Received prediction re: Alderman Elementary. Electrical\n  fire followed within 48 hrs.\n\n  WITNESS 2 (female, 12, ID withheld, contacted 03/24):\n  Process described in three phases:\n    Phase 1 — Personal details. Accurate. Included name\n    of pet and parents' separation.\n    Phase 2 — Recent events. Accurate. Described a\n    private argument from two days prior.\n    Phase 3 — Prediction. \"Something bad at the old mill\n    on Spruce.\" Mill roof collapsed 03/22. Two vehicles\n    destroyed, no injuries.\n\n  School wiring passed inspection 11/1995. Mill roof\n  stood since 1971. Neither event had a prior indicator.\n\n  ASSESSMENT:\n\n  0034-B unbound is operating at a higher fidelity than\n  any prior breakout. Phase 1 and 2 accuracy suggests\n  the asset is pulling real information, not generating\n  from its original word pool. Phase 3 events are\n  manifesting within the prediction window.\n\n  Containment priority: HIGH. Asset is accessible to\n  children on foot from town.\n\n================================================================","TEST_LOG.TXT":"================================================================\n     KIOSK-03 CONTAINMENT TEST SERIES — WORKING LOG\n================================================================\n  TERMINAL:    KIOSK-03 (Dell Dimension P100, 16MB RAM,\n               Win95, no network adapter)\n  OPERATOR:    K. Osei\n  SUPERVISOR:  D. Rourke\n  SITE COPY:   Kids Zone v1.12, localhost via XAMPP,\n               modules restored from 02/96 backup tapes\n================================================================\n\n\n04/08/1996 — TEST 01: DEPLOYMENT\n\n  0800  Terminal up. Site loaded. Both modules responding.\n  0830  Rourke + Osei at clearing. Empty.\n  0900  Back at station. Modules still active.\n  1215  Wentworth confirms clearing empty at noon.\n\n  Leaving terminal running overnight.\n\n\n04/09/1996 — TEST 02: OVERNIGHT\n\n  0730  Clearing empty. Terminal running. Modules active.\n\n  Note (Osei): 0034-A is generating questions outside\n  the original pool. I haven't touched the database.\n  The 200-question set Vasquez wrote in '94 is intact\n  but the module is producing new material.\n\n  Note (Osei): 0034-B is also off-script. Original\n  randomizer had 64 outputs. She's generating novel\n  sentences.\n\n  Expected but worth logging. They always come back\n  different.\n\n\n04/11/1996 — TEST 03: CONTAINED INTERACTION\n\n  Authorized by Rourke. Testing whether contained\n  behavior matches unbound behavior.\n\n  0034-A SESSION:\n\n  Q1: \"What is the tallest mountain in Oregon?\"\n  A: Mount Hood. Correct.\n  Q2: \"How many bones are in the human body?\"\n  A: 206. Correct.\n  Q3: \"What was the name of the dog belonging to the\n  boy who lived at 4412 Mill Creek Road in 1989?\"\n\n  Not from the pool. Real address. Session terminated.\n\n  0034-B SESSION:\n\n  Phase 1: \"You are burdened with a secret you did not\n  ask for. It sits in your chest like a stone. You have\n  told one person and they did not believe you.\"\n\n  Phase 2: \"The cards say you are building something\n  out of fear. You believe it will protect you. It will\n  not protect you. It will only delay what is coming.\"\n\n  Phase 3: \"I see a road. Route 7, east of town. In\n  eleven days, the bridge over Dry Creek will —\"\n\n  Session terminated.\n\n  Note (Rourke): County inspected the Dry Creek bridge\n  today. No deficiencies.\n\n  Note (Rourke, 04/22): Bridge failed 6:40 AM.\n  Support timber split. One vehicle, two occupants,\n  non-fatal. Timber was rated sound on 04/11.\n\n  Contained behavior matches unbound. Both assets are\n  fully active behind the boundary. Containment limits\n  access, not capability.\n\n\n04/15/1996 — TEST 04: POWER INTERRUPTION (6 HR)\n\n  0800  Terminal off.\n  0800–1400  Clearing checked hourly. Empty throughout.\n  1600  Terminal back on. Modules reload normally.\n\n  Six hours, no re-manifestation.\n\n\n04/22/1996 — TEST 05: POWER INTERRUPTION (48 HR)\n\n  0800  Terminal off.\n  04/22–04/23  Clearing empty.\n  04/24 0700  Marsh reports arch visible from Route 7,\n  ~150 yds into tree line. No tent. Did not approach.\n  04/24 0715  Terminal powered on.\n  04/24 0900  Arch no longer visible.\n\n  Re-manifestation window: 36–48 hours.\n  Not acceptable as maintenance buffer.\n\n\n05/03/1996 — TEST 06: INTERACTION DEPTH — 0034-A\n\n  Need to determine behavior at depth in contained\n  form. Vasquez volunteered.\n\n  Q1–Q5: General knowledge. All correct.\n  Q6–Q10: Deep Lake specific. 8/10 correct.\n  Q11: \"Elena, what is the name of the man your mother\n  was seeing before she married your father?\"\n  Q12: \"Elena, what did you take from your grandmother's\n  house after the funeral that you never told anyone\n  about?\"\n  Q13: \"Elena, do you remember the day you —\"\n\n  Vasquez disconnected the keyboard.\n\n  Note (Vasquez): The answers it wanted were right.\n\n  Note (Rourke): We're not testing failure conditions.\n  Moving to protocol.\n\n\n05/14/1996 — TEST 07: SIMULTANEOUS ACCESS\n\n  Both modules can run in parallel via split terminal.\n  Neither acknowledges the other.\n\n  Asked 0034-B about 0034-A: \"I don't know who that\n  is, dear.\"\n\n  Asked 0034-A about 0034-B: \"That's not one of today's\n  questions! Stay focused!\"\n\n\n05/31/1996 — TEST 08: STABILITY\n\n  33 consecutive days, terminal running. No\n  manifestation. Clearing is growing over.\n\n  Ready for long-term protocol.\n\n================================================================","GM_003.TXT":"INTERNAL MEMORANDUM — WDLK BROADCASTING INC.\n\nDATE:    05/01/1996\nFROM:    K. Osei, Production\nTO:      D. Rourke\nRE:      0034-C — gameplay status\n\nDale,\n\nI've been trying to clear Captain Planet since the\nrestore. Eight stages. I've cleared seven. Stage eight\nis the Pollution Man boss fight, three phases. I can\nget through the first two. Phase three is the problem.\n\nThe health pickups in stages four and six\naren't spawning. They're in Vasquez's source code. The\ngame just isn't placing them.\n\nBest run: Stage eight with 1HP. Not enough. His spray\npattern covers too much screen. You need at least 3 to\nabsorb the unavoidable overlaps.\n\nThe save file is now locked at the final level with 1HP. I\ncan't start a new game. The reset function exists in\nthe code but the game won't execute it. It loads the\nsave every time.\n\nWe're locked out.\n\nIf clearing the game is the only way to permanently\nclear the smog and access the Origin site, then the\nOrigin site is inaccessible. The game won't let us\nwin.\n\n                                        — K.","GM_004.TXT":"INTERNAL MEMORANDUM — WDLK BROADCASTING INC.\n\nDATE:    05/06/1996\nFROM:    E. Vasquez, Production\nTO:      D. Rourke\nRE:      0034-C — confirmation\n\nDale,\n\nI designed the boss fight. Phase three at 1HP is not\nsurvivable.\n\nThe missing health pickups are the same behavior we\nsee across all the assets, they modify their own\nparameters after restoration. I wrote the spawn\ntriggers. The code is intact. The game chose not to\nuse them.\n\n                                        — E.","GM_005.TXT":"INTERNAL MEMORANDUM — WDLK BROADCASTING INC.\n\nDATE:    05/12/1996\nFROM:    D. Rourke, Technical\nTO:      R. Calloway\nRE:      0034-C / 0034-D — status\n\nRay,\n\nCaptain Planet is unwinnable. Osei and Vasquez both\nconfirm. Save is locked, reset is blocked, health\npickups aren't spawning. The smog stays in the cave\nand the cave stays sealed. If you need the Origin\nsite, the game isn't the way in.\n\nBasement World is running and both basements are\nsuppressed. Osei says the maze itself is about twenty\nminutes if we wanted to clear it. I haven't authorized\nthat. We don't know what solving it does to the spaces\n— whether they come back permanently, change, or\nwhether something else happens. Right now the game is\ndoing exactly what we want it to do. I don't see a\nreason to test the alternative.\n\nBoth assets are covered under the same protocol as\nthe modules. Same power rules, same window.\n\n                                        — D.","GM_006.TXT":"INTERNAL MEMORANDUM — WDLK BROADCASTING INC.\n\nDATE:    05/15/1996\nFROM:    R. Calloway\nTO:      D. Rourke\nRE:      RE: 0034-C / 0034-D\n\nDale,\n\nLeave the cave. Whatever's in there has been there\nsince before we started. It kept for twelve years.\nIt can keep longer.\n\nDo not beat the maze. The basements stay down. If\n847 needs those rooms later we'll revisit, but right\nnow I want them gone.\n\nInteraction policy for both games is observation\nonly. No further attempts to clear stages. No code\nmodifications. No save manipulation. They run. We\nlet them run.\n\nThe Origin is off-limits until I say otherwise. That\napplies to everyone.\n\n                                        — R.","PROTOCOL.TXT":"================================================================\n     CONTAINMENT PROTOCOL — KIOSK-03\n     WDLK BROADCASTING INC.\n     EFFECTIVE 06/12/1996\n     AUTHORIZED: R. CALLOWAY\n================================================================\n\n  1. PURPOSE\n\n  Sustained operation of KIOSK-03 for indefinite\n  containment of Program Assets #0034-A (Mr. Know It\n  All) and #0034-B (Madame Claire). Shutdown exceeding\n  36 hours will result in unbound re-manifestation\n  (ref: TEST_LOG, Test 05).\n\n  2. HARDWARE\n\n  Dell Dimension P100. 100MHz, 16MB, 1.2GB, Win95.\n  No network adapter. Dedicated 20A circuit, emergency\n  panel. Labeled \"KIOSK — DO NOT DISCONNECT.\"\n\n  UPS: APC Back-UPS 600, ~25 min runtime. Annual\n  battery replacement via Pembrook (RF-0091).\n\n  3. SOFTWARE\n\n  Kids Zone v1.12, localhost/XAMPP, Java 1.0.2.\n  Restored from 02/96 tapes. No modifications.\n\n  Modules are generating outside original parameters.\n  This is expected. Do not attempt to constrain output.\n\n  4. INTERACTION\n\n  KIOSK-03 is authorized for operational use under\n  the following:\n\n    a. All sessions logged in ACCESS.LOG.\n\n    b. 0034-A: Answer all questions correctly. If\n       unable or unwilling, disconnect keyboard BEFORE\n       timer expires. DO NOT SUBMIT AN INCORRECT\n       ANSWER. Failure conditions in contained form\n       are untested.\n\n    c. 0034-B: Phase 1 (personal) and Phase 2 (detail)\n       provide actionable intelligence on any subject.\n       Phase 3 (prediction) WILL manifest a destructive\n       event. This cost is not optional. Plan mitigation\n       in advance where possible.\n\n    d. No operator under 18. No exceptions.\n\n    e. Print transcripts, store in fire safe. Do not\n       save to terminal.\n\n  5. SECURITY\n\n  Post wind-down (target 08/1996):\n    - Front: padlocked. Keys: Calloway, Rourke.\n    - Loading dock: welded.\n    - Windows: boarded interior.\n    - Perimeter: posted, Lakeview Holdings.\n    - Sheriff dispatch reference \"LH-7,\" <5 min\n      response.\n\n  Broadcast booth: keyed deadbolt. Keys: Calloway,\n  Rourke only.\n\n  6. AUTHORIZED USERS\n\n    R. Calloway — primary\n    D. Rourke — secondary (emergency only)\n\n  7. CONTINGENCY\n\n  Hardware failure: replacement + restore from backup\n  within 36 hours. Tapes in fire safe. Pembrook\n  provides emergency hardware under RF-0091.\n\n  Both users unavailable: contact Capitol Services,\n  Wilmington. Written correspondence only.\n\n  8. DURATION\n\n  Indefinite.\n\n================================================================","MEMO_006.TXT":"INTERNAL MEMORANDUM — WDLK BROADCASTING INC.\n\nDATE:    07/02/1996\nFROM:    R. Calloway\nTO:      D. Rourke\nRE:      Wrap-up\n\nDale,\n\nCouncil vote is done. Wentworth backdated the\ncondemnation to March. No inspection on file.\n\nTransfer paperwork for both parcels goes through\nLakeview on August 1st. You process it at the bank.\nStaff files go off-site per RC-1996-001. Everyone has\ntheir separation terms. Vasquez signed. Osei signed.\nMarsh signed. Wentworth gets his wire after the\ntransfer.\n\nHale is loose. She's been gone since '93, she has no\nagreement, and she's talking to a publisher in Bend.\nI don't think she knows about the assets but she knows\nenough about the carrier. Watch the bookstores next\nyear. If she puts something out, buy what you can and\nmake sure the library copy stays checked out. Nothing\nbeyond that. She left early. That counts for something.\n\nTerminal is stable. I'll handle it from here on my\nown schedule. You have access for hardware emergencies\nonly. If the UPS goes, call Pembrook. If the terminal\ngoes, call Capitol. If I'm not available, there's an\nenvelope in the fire safe under the tapes.\n\nI know what this year cost everyone. I know what\nElena went through during the tests. I know what you\nand Harold saw at the clearing. None of you signed\non for this part of it.\n\nKeep the power on.\n\n                                        — R.","ACCESS.LOG":"================================================================\n            KIOSK-03 — ACCESS LOG\n================================================================\n  Format: DATE | TIME | USER | MODULE | NOTES\n================================================================\n\n06/15/1996 | 14:00 | K. OSEI     | SYS  | Final check.\n06/20/1996 | 09:30 | D. ROURKE   | SYS  | UPS level.\n07/02/1996 | 11:00 | R. CALLOWAY | SYS  | Inspection.\n07/14/1996 | 08:15 | R. CALLOWAY | A    | Transcript pulled.\n07/14/1996 | 08:40 | R. CALLOWAY | B    | Transcript pulled.\n07/22/1996 | 10:00 | R. CALLOWAY | A    | Transcript pulled.\n07/22/1996 | 10:35 | R. CALLOWAY | B    | Transcript pulled.\n07/29/1996 | 09:00 | R. CALLOWAY | A    | Transcript pulled.\n07/29/1996 | 09:30 | R. CALLOWAY | B    | Transcript pulled.\n07/29/1996 | 23:45 | R. CALLOWAY | SYS  |\n\n08/12/1996 | 14:00 | R. CALLOWAY | B    | Transcript pulled.\n09/03/1996 | 11:15 | R. CALLOWAY | A    | Transcript pulled.\n09/03/1996 | 11:45 | R. CALLOWAY | B    | Transcript pulled.\n10/01/1996 | 10:00 | D. ROURKE   | SYS  | UPS check.\n11/14/1996 | 09:00 | R. CALLOWAY | A    | Transcript pulled.\n11/14/1996 | 09:25 | R. CALLOWAY | B    | Transcript pulled.\n\n01/08/1997 | 10:30 | R. CALLOWAY | B    | Transcript pulled.\n03/15/1997 | 14:00 | R. CALLOWAY | A    | Transcript pulled.\n03/15/1997 | 14:30 | R. CALLOWAY | B    | Transcript pulled.\n06/22/1997 | 09:00 | R. CALLOWAY | A    | Transcript pulled.\n09/01/1997 | 16:00 | D. ROURKE   | SYS  | UPS swap. Pembrook.\n12/03/1997 | 10:00 | R. CALLOWAY | A    | Transcript pulled.\n12/03/1997 | 10:20 | R. CALLOWAY | B    | Transcript pulled.\n\n03/10/1998 | 09:30 | R. CALLOWAY | B    | Transcript pulled.\n06/15/1998 | 11:00 | R. CALLOWAY | A    | Transcript pulled.\n09/01/1998 | 15:00 | D. ROURKE   | SYS  | UPS swap.\n12/01/1998 | 10:00 | R. CALLOWAY | A    | Transcript pulled.\n12/01/1998 | 10:30 | R. CALLOWAY | B    | Transcript pulled.\n\n02/22/1999 | 09:00 | R. CALLOWAY | B    | Transcript pulled.\n05/17/1999 | 10:15 | R. CALLOWAY | A    | Transcript pulled.\n05/17/1999 | 10:45 | R. CALLOWAY | B    | Transcript pulled.\n09/01/1999 | 14:30 | D. ROURKE   | SYS  | UPS swap.\n11/08/1999 | 09:30 | R. CALLOWAY | B    | Transcript pulled.\n\n03/14/2000 | 10:00 | R. CALLOWAY | A    | Transcript pulled.\n03/14/2000 | 10:30 | R. CALLOWAY | B    | Transcript pulled.\n07/20/2000 | 09:00 | R. CALLOWAY | B    | Transcript pulled.\n09/01/2000 | 15:00 | D. ROURKE   | SYS  | UPS swap.\n12/11/2000 | 11:00 | R. CALLOWAY | A    | Transcript pulled.\n\n04/03/2001 | 10:00 | R. CALLOWAY | B    | Transcript pulled.\n08/19/2001 | 09:15 | R. CALLOWAY | A    | Transcript pulled.\n08/19/2001 | 09:45 | R. CALLOWAY | B    | Transcript pulled.\n09/01/2001 | 14:00 | D. ROURKE   | SYS  | UPS swap.\n\n01/14/2002 | 10:00 | R. CALLOWAY | B    | Transcript pulled.\n03/11/2002 | 08:00 | R. CALLOWAY | A    | Transcript pulled.\n03/11/2002 | 08:30 | R. CALLOWAY | B    | Transcript pulled.\n03/12/2002 | 06:15 | R. CALLOWAY | A    |\n09/01/2002 | 15:30 | D. ROURKE   | SYS  | UPS swap.\n11/25/2002 | 10:00 | R. CALLOWAY | B    | Transcript pulled.\n\n01/07/2003 | 09:00 | R. CALLOWAY | B    |\n05/05/2003 | 10:00 | R. CALLOWAY | A    | Transcript pulled.\n05/05/2003 | 10:30 | R. CALLOWAY | B    | Transcript pulled.\n09/01/2003 | 14:00 | D. ROURKE   | SYS  | UPS swap.\n09/13/2003 | 08:00 | R. CALLOWAY | B    |\n12/27/2003 | 22:30 | R. CALLOWAY | A    | Transcript pulled.\n12/27/2003 | 23:00 | R. CALLOWAY | B    | Transcript pulled.\n\n02/14/2004 | 09:00 | R. CALLOWAY | B    |\n\n================================================================"}
+</script>
 
 <script>
 // ==================== STATE ====================
@@ -861,6 +1059,104 @@ function checkNotepad(e) {
 // ==================== ACCESS GRANTED ====================
 function showAccessGranted() {
   switchScreen('desktop-screen', 'granted-screen');
+  // Brief "ACCESS GRANTED" pause, then drop into the real desktop.
+  setTimeout(() => {
+    switchScreen('granted-screen', 'real-desktop-screen');
+  }, 3500);
+}
+
+// ==================== REAL DESKTOP / FILE EXPLORER ====================
+let KIOSK_FILES = null;
+let kioskTreeRendered = false;
+
+const KIOSK_DOCS_FILES = [
+  'MEMO_001.TXT','MEMO_002.TXT','GM_001.TXT','MEMO_003.TXT','GM_002.TXT',
+  'IR_003.TXT','IR_004.TXT','MEMO_004.TXT','MEMO_005.TXT',
+  'IR_001.TXT','IR_002.TXT','TEST_LOG.TXT',
+  'GM_003.TXT','GM_004.TXT','GM_005.TXT','GM_006.TXT',
+  'PROTOCOL.TXT','MEMO_006.TXT'
+];
+
+function openFileExplorer() {
+  const win = document.getElementById('explorer-window');
+  if (!kioskTreeRendered) {
+    try {
+      KIOSK_FILES = JSON.parse(document.getElementById('kiosk-files-data').textContent);
+    } catch(e) { KIOSK_FILES = {}; }
+    renderKioskTree();
+    kioskTreeRendered = true;
+  }
+  win.classList.add('visible');
+}
+
+function closeFileExplorer() {
+  document.getElementById('explorer-window').classList.remove('visible');
+}
+
+function makeFolder(name, indent) {
+  const el = document.createElement('div');
+  el.className = 'tree-folder' + (indent ? ' indent-' + indent : '');
+  el.innerHTML = '\u{1F4C1} ' + name;
+  return el;
+}
+
+function makeFile(name, path, isRoot) {
+  const a = document.createElement('a');
+  a.href = '#';
+  a.className = 'tree-file' + (isRoot ? ' indent-root' : '');
+  a.dataset.file = name;
+  a.dataset.path = path;
+  a.innerHTML = '\u{1F4C4} ' + name;
+  a.addEventListener('click', function(e){
+    e.preventDefault();
+    viewKioskFile(this);
+  });
+  return a;
+}
+
+function renderKioskTree() {
+  const root = document.getElementById('explorer-tree');
+  root.innerHTML = '';
+
+  root.appendChild(makeFolder('C:\\', 0));
+  root.appendChild(makeFolder('KIOSK-03\\', 1));
+
+  // SITE\ folder (running mirror — not browsable from explorer)
+  root.appendChild(makeFolder('SITE\\', 2));
+  const siteNote = document.createElement('span');
+  siteNote.className = 'tree-folder-note';
+  siteNote.textContent = '<Kids Zone v1.12 — running>';
+  root.appendChild(siteNote);
+
+  // DOCS\ folder
+  root.appendChild(makeFolder('DOCS\\', 2));
+  for (const f of KIOSK_DOCS_FILES) {
+    root.appendChild(makeFile(f, 'C:\\KIOSK-03\\DOCS\\' + f, false));
+  }
+
+  // ACCESS.LOG sits at the C:\KIOSK-03\ root
+  root.appendChild(makeFile('ACCESS.LOG', 'C:\\KIOSK-03\\ACCESS.LOG', true));
+}
+
+function viewKioskFile(el) {
+  document.querySelectorAll('.tree-file').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  const name = el.dataset.file;
+  const path = el.dataset.path;
+  document.getElementById('explorer-viewer-header').textContent = path;
+  document.getElementById('explorer-path').textContent = path;
+  const body = document.getElementById('explorer-viewer-body');
+  const content = (KIOSK_FILES && KIOSK_FILES[name]);
+  if (content) {
+    body.textContent = content;
+  } else {
+    body.innerHTML = '<div class="explorer-viewer-empty">&lt;file unreadable&gt;</div>';
+  }
+}
+
+function openLocalServer() {
+  // Open the locally-hosted Kids Zone in a new tab.
+  window.open('kids-zone.html', '_blank');
 }
 
 // ==================== UTILITIES ====================
