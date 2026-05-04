@@ -1372,15 +1372,16 @@ const ATTACKS = {
     },
   },
 
-  // Signature — 5 expanding rings of increasing density, then a
-  // 3-second stun window where the boss is exposed.
+  // Signature — 9 expanding rings of escalating density, with a
+  // sustained inward drizzle layered between rings. No stun window.
   ACID_RAIN: {
     name: 'ACID RAIN',
-    duration: 11.5,
+    duration: 13.0,
     init() {
       bossAI.state.phase = 'telegraph';
       bossAI.state.t = 0;
       bossAI.state.ringIndex = 0;
+      bossAI.state.drizzleT = 0;
       // Park boss at center for the signature.
       bossAI.state.targetX = (BOSS_ZONE.x + BOSS_ZONE.x + BOSS_ZONE.w) / 2;
     },
@@ -1396,25 +1397,31 @@ const ATTACKS = {
       if (s.phase === 'telegraph') {
         if (s.t >= 1.0) {
           s.phase = 'rings';
-          s.t = 0.8; // fire first ring immediately
+          s.t = 1.1;        // fire first ring immediately
           s.ringIndex = 0;
         }
       } else if (s.phase === 'rings') {
-        const counts = [16, 20, 24, 28, 32];
-        if (s.ringIndex < counts.length && s.t >= 0.8) {
+        // Denser, longer ring train. Counts grow steadily so the
+        // late rings are nearly impassable without orbiting.
+        const counts = [22, 26, 30, 34, 38, 42, 46, 50, 54];
+        const interval = 1.05;          // seconds between rings
+        if (s.ringIndex < counts.length && s.t >= interval) {
           s.t = 0;
           spawnRadial(boss.x, boss.y, counts[s.ringIndex],
-                      110, s.ringIndex * 0.13,
+                      120, s.ringIndex * 0.11,
                       { color: ACID_BULLET_COLOR });
           s.ringIndex++;
         }
-        if (s.ringIndex >= counts.length && s.t >= 0.8) {
-          s.phase = 'stun';
-          s.t = 0;
+        // Sustained acid drizzle from the ceiling — bullets fall
+        // straight down through the ring gaps, punishing players
+        // who park between rings.
+        s.drizzleT += dt;
+        if (s.drizzleT >= 0.18) {
+          s.drizzleT = 0;
+          const dx = ARENA.x + 16 + Math.random() * (ARENA.w - 32);
+          spawnBullet(dx, ARENA.y - 6, 0, 220,
+                      { color: ACID_BULLET_COLOR });
         }
-      } else if (s.phase === 'stun') {
-        // Boss frozen, vulnerable, no attacks for 3s.
-        // (Player auto-fire racks up bonus damage naturally.)
       }
     },
     draw() {
@@ -1429,12 +1436,6 @@ const ATTACKS = {
         ctx.fillStyle = '#aaff66';
         ctx.textAlign = 'center';
         ctx.fillText('ACID RAIN', CANVAS_W / 2, ARENA.y - 30);
-      } else if (s.phase === 'stun') {
-        ctx.font = 'bold 11px "Courier New", monospace';
-        ctx.fillStyle = '#ffe060';
-        ctx.textAlign = 'center';
-        const blink = Math.floor(s.t * 6) % 2 === 0;
-        if (blink) ctx.fillText('!! STUNNED !!', boss.x, boss.y - BOSS_H / 2 - 8);
       }
     },
   },
@@ -3120,6 +3121,20 @@ const errorFlood = {
 };
 
 // ---------- Phase 3 startup ----------
+// Set up Phase 2: refill the HP bar, force Red soul, clean state.
+// Called from both the HP-threshold path and the death fallback so
+// Phase 2 always begins with a fresh 600 HP regardless of where
+// Phase 1 ended.
+function startPhase2() {
+  resetBossAI();
+  boss.hp = boss.maxHp;
+  boss.invincible = false;
+  enemyBullets.length = 0;
+  setState(S_RED);
+  bossAI.soul = 'red';
+  bossAI.soulNamedShown.red = true;
+}
+
 function startPhase3() {
   // Boss is reborn as the [RED] entity — full HP bar for the new fight.
   boss.hp = boss.maxHp;
@@ -3699,11 +3714,7 @@ function updateBoss(dt) {
     enemyBullets.length = 0;
     playCutscene(getPhase1To2(), () => {
       startPhase(2);
-      resetBossAI();
-      // Phase 2 opens in Red soul.
-      setState(S_RED);
-      bossAI.soul = 'red';
-      bossAI.soulNamedShown.red = true;
+      startPhase2();
     });
     return;
   }
@@ -3782,10 +3793,7 @@ function checkCollisions() {
             boss.hp = 1;
             playCutscene(getPhase1To2(), () => {
               startPhase(2);
-              resetBossAI();
-              setState(S_RED);
-              bossAI.soul = 'red';
-              bossAI.soulNamedShown.red = true;
+              startPhase2();
             });
           } else if (game.phase === 2) {
             // Phase 2 ends here — the final auto-fire hit triggers
