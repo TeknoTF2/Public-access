@@ -1880,7 +1880,9 @@ Object.assign(ATTACKS, {
       if (!s.fired && s.roundT >= 1.5) {
         s.fired = true;
         for (const z of s.zones) {
-          spawnRadial(z.x, z.y, 14, 130 * P2_SPEED);
+          // 10 bullets at moderate speed gives clear sight-lines
+          // between rays — was 14 at 130 which packed every angle.
+          spawnRadial(z.x, z.y, 10, 90 * P2_SPEED);
         }
       }
     },
@@ -1932,7 +1934,9 @@ Object.assign(ATTACKS, {
       if (!s.popped && s.roundT >= 4.0) {
         s.popped = true;
         for (const bub of s.bubbles) {
-          spawnRadial(bub.x, bub.y, 8, 170 * P2_SPEED);
+          // Slower scatter (was 170) so the player can actually
+          // weave between the rays from adjacent bubbles.
+          spawnRadial(bub.x, bub.y, 8, 110 * P2_SPEED);
         }
         s.bubbles = [];
       }
