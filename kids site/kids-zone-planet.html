@@ -397,9 +397,21 @@ function playCutscene(lines, onDone) {
   // Wipe all in-flight bullets; nobody fires during a cutscene.
   playerBullets.length = 0;
   enemyBullets.length = 0;
-  // Reset the player's auto-fire cooldown so they can't get a free
-  // tick the instant the cutscene ends.
-  player.fireCooldown = PLAYER_FIRE_INTERVAL;
+  // Stop any boss attack mid-flight so it doesn't keep spawning
+  // bullets while the cutscene is active.
+  bossAI.attack = null;
+  bossAI.attackT = 0;
+  bossAI.state = {};
+  if (bossAI.phase3) {
+    bossAI.phase3.slot1.attack = null;
+    bossAI.phase3.slot2.attack = null;
+    if (bossAI.phase3.activeModifier) _endModifier();
+  }
+  clearAttackHooks();
+  // Hold off the player's next auto-fire shot for a brief moment
+  // after the cutscene ends so they can't punch through the
+  // post-cutscene transition with a free shot.
+  player.fireCooldown = PLAYER_FIRE_INTERVAL * 4;
 }
 
 function advanceCutscene() {
@@ -702,7 +714,10 @@ function updatePlayer(dt) {
     case S_GREEN:  updatePlayerGreen(dt);  break;
   }
 
-  // Player auto-fires upward (stream of bullets)
+  // Player auto-fires upward (stream of bullets). Suppressed during
+  // cutscenes/defeat as defense in depth — these states already
+  // gate updatePlayer at the main-loop level.
+  if (cutscene.active || defeatSeq.active) return;
   player.fireCooldown -= dt;
   if (player.fireCooldown <= 0) {
     player.fireCooldown = PLAYER_FIRE_INTERVAL;
@@ -3773,12 +3788,17 @@ function updateBullets(dt) {
 }
 
 function checkCollisions() {
+  // Suppressed entirely while a cutscene or the defeat sequence is
+  // running — defense in depth on top of the main-loop branching.
+  if (cutscene.active || defeatSeq.active) return;
+
   // Player bullets vs boss (rect)
   if (!boss.invincible) {
     const bx = boss.x - BOSS_W / 2;
     const by = boss.y - BOSS_H / 2;
     for (let i = playerBullets.length - 1; i >= 0; i--) {
       const b = playerBullets[i];
+      if (!b) continue;
       if (pointInRect(b.x, b.y, bx, by, BOSS_W, BOSS_H)) {
         playerBullets.splice(i, 1);
         boss.hp -= 1;
@@ -3811,6 +3831,10 @@ function checkCollisions() {
           } else {
             // Mid-transition (1.5 / 2.5) — let the cutscene complete.
           }
+          // Cutscene/defeat now owns the frame — bail out of the
+          // collision loop so we don't keep iterating over an
+          // already-cleared bullet array.
+          return;
         }
       }
     }
