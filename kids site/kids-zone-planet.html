@@ -1541,14 +1541,16 @@ const ATTACKS = {
           s.ringIndex = 0;
         }
       } else if (s.phase === 'rings') {
-        // Denser, longer ring train. Counts grow steadily so the
-        // late rings are nearly impassable without orbiting.
-        const counts = [22, 26, 30, 34, 38, 42, 46, 50, 54];
+        // Escalating ring density. Counts are capped so the linear
+        // gap between bullets stays player-passable by the time the
+        // ring reaches the arena edge — late rings used to pack 50+
+        // bullets and there was no room to thread.
+        const counts = [22, 24, 26, 28, 30, 32, 34, 36, 38];
         const interval = 1.05;          // seconds between rings
         if (s.ringIndex < counts.length && s.t >= interval) {
           s.t = 0;
           spawnRadial(boss.x, boss.y, counts[s.ringIndex],
-                      120, s.ringIndex * 0.11,
+                      150, s.ringIndex * 0.11,
                       { color: ACID_BULLET_COLOR });
           s.ringIndex++;
         }
