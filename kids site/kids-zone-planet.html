@@ -1192,8 +1192,9 @@ const ATTACKS = {
     },
   },
 
-  // 4 fixed nozzles fire sweeping streams; boss continues moving
-  // and occasionally drops aimed shots.
+  // 4 fixed nozzles fire down with a tight sweep — each nozzle
+  // stays close enough to its own column that adjacent streams
+  // don't fully cross. No additional aimed shots from the boss.
   EXHAUST_PIPES: {
     name: 'EXHAUST PIPES',
     duration: 8.0,
@@ -1204,28 +1205,22 @@ const ATTACKS = {
         bossAI.state.nozzleX.push(ARENA.x + ARENA.w * (i + 1) / (n + 1));
       }
       bossAI.state.streamT = 0;
-      bossAI.state.aimT = 0;
     },
     update(dt) {
       const s = bossAI.state;
       bossSweep(dt, 1.1);
       s.streamT += dt;
-      s.aimT += dt;
       if (s.streamT >= 0.30) {
         s.streamT = 0;
         const speed = 130 * bossAI.bulletSpeedMul;
         for (let i = 0; i < s.nozzleX.length; i++) {
-          // Each nozzle has its own slow sweep cycle.
-          const sweep = Math.sin(bossAI.attackT * 1.4 + i * 0.9) * 0.55;
+          // Each nozzle's sweep is tight — narrow enough that adjacent
+          // pipes don't merge into a wall.
+          const sweep = Math.sin(bossAI.attackT * 1.4 + i * 0.9) * 0.18;
           const a = Math.PI / 2 + sweep; // base = straight down
           spawnBullet(s.nozzleX[i], ARENA.y - 6,
                       Math.cos(a) * speed, Math.sin(a) * speed);
         }
-      }
-      if (s.aimT >= 1.1) {
-        s.aimT = 0;
-        spawnAimed(boss.x, boss.y, player.x, player.y,
-                   200 * bossAI.bulletSpeedMul);
       }
     },
     draw() {
