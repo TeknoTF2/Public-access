@@ -2076,22 +2076,39 @@ Object.assign(ATTACKS, {
   // Grid of bullets with one drifting safe gap.
   STATIC_FIELD: {
     name: 'STATIC FIELD',
-    duration: 9.5,
+    duration: 10.5,
     init() {
+      // Telegraph the safe gap on top of the player's current
+      // position for ~1.2s before the grid materialises, so the
+      // player has a clear "stand still here" target to hold.
+      bossAI.state.phase = 'telegraph';
       bossAI.state.t = 0;
       bossAI.state.dirIdx = 0;
       bossAI.state.dirChanges = 0;
       bossAI.state.dir = { x: 1, y: 0 };
-      bossAI.state.spawned = false;
-      bossAI.state.gapX = ARENA.x + ARENA.w / 2;
-      bossAI.state.gapY = ARENA.y + ARENA.h / 2;
+      bossAI.state.gapX = player.x;
+      bossAI.state.gapY = player.y;
       bossAI.state.gridBullets = [];
-      _populateGrid();
     },
     update(dt) {
       const s = bossAI.state;
       bossSweep(dt, 0.3);
       s.t += dt;
+
+      if (s.phase === 'telegraph') {
+        // Re-anchor the gap to the player while the warning runs so
+        // the safe pocket lands exactly where they were standing
+        // when the grid drops.
+        s.gapX = player.x;
+        s.gapY = player.y;
+        if (s.t >= 1.2) {
+          s.phase = 'active';
+          s.t = 0;
+          _populateGrid();
+        }
+        return;
+      }
+
       // Drift bullets in current direction (slower than the original
       // 45px/s so the player has a beat to read each shift).
       const sp = 28 * P2_SPEED;
@@ -2113,17 +2130,35 @@ Object.assign(ATTACKS, {
         const dirs = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
         s.dir = dirs[Math.floor(Math.random() * 4)];
       }
-      // Push grid bullets into enemyBullets each frame as static? No —
-      // use them directly with a custom collision via spawnHarmless?
-      // Simpler: each frame drop fresh real bullets at their positions
-      // and remove old ones. But that's expensive — instead, render
-      // them ourselves and check collisions inline.
       _staticFieldCollide(s);
     },
     draw() {
       const s = bossAI.state;
-      if (!s || !s.gridBullets) return;
+      if (!s) return;
       ctx.save();
+
+      if (s.phase === 'telegraph') {
+        // Pulsing warning ring on the player's position. No grid
+        // yet — the player just sees where the safe pocket will
+        // open and can stand still inside it.
+        const pulse = 0.45 + 0.35 * Math.sin(s.t * 16);
+        ctx.fillStyle = 'rgba(80, 220, 120, ' + (pulse * 0.55).toFixed(2) + ')';
+        ctx.beginPath();
+        ctx.arc(s.gapX, s.gapY, 30, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(140, 255, 160, ' + pulse.toFixed(2) + ')';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(s.gapX, s.gapY, 30, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.font = 'bold 13px "Courier New", monospace';
+        ctx.fillStyle = '#aaffaa';
+        ctx.textAlign = 'center';
+        ctx.fillText('STATIC FIELD', CANVAS_W / 2, ARENA.y - 18);
+        ctx.restore();
+        return;
+      }
+
       for (const b of s.gridBullets) {
         // Skip bullets inside the gap.
         const dx = b.x - s.gapX, dy = b.y - s.gapY;
