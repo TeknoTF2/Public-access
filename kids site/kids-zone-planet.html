@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<title>~ Captain Planet Saves the Day! ~ TV Odyssey Kids Zone</title>
+<style>
+body {
+  background-color: #ffd900;
+  background-image:
+    repeating-linear-gradient(45deg, transparent 0, transparent 18px, rgba(255,255,255,0.35) 18px, rgba(255,255,255,0.35) 19px);
+  font-family: 'Comic Sans MS', 'Comic Sans', cursive, sans-serif;
+  color: #2c1810;
+  margin: 0;
+  padding: 16px 10px;
+  user-select: none;
+}
+
+.frame {
+  width: 760px;
+  max-width: 96vw;
+  margin: 0 auto;
+  background: #fff;
+  border: 4px solid #2c1810;
+  box-shadow: 8px 8px 0 #2c1810;
+}
+
+.stripes-bar {
+  height: 22px;
+  background: repeating-linear-gradient(
+    to right,
+    #e91e63 0, #e91e63 40px,
+    #ff9800 40px, #ff9800 80px,
+    #ffd900 80px, #ffd900 120px,
+    #4caf50 120px, #4caf50 160px,
+    #2196f3 160px, #2196f3 200px,
+    #9c27b0 200px, #9c27b0 240px
+  );
+  border-top: 2px solid #2c1810;
+  border-bottom: 2px solid #2c1810;
+}
+
+.header {
+  background: linear-gradient(180deg, #1565c0 0%, #0d47a1 100%);
+  text-align: center;
+  padding: 22px 10px;
+  border-bottom: 4px solid #2c1810;
+  color: #ffd900;
+}
+.header h1 {
+  font-family: 'Comic Sans MS', cursive;
+  font-size: 32px;
+  margin: 0;
+  text-shadow: 3px 3px 0 #000;
+  letter-spacing: 2px;
+}
+.header .sub {
+  color: #b3e5fc;
+  font-size: 13px;
+  font-style: italic;
+  margin-top: 6px;
+}
+
+.game-area {
+  padding: 12px;
+  background: #000;
+  text-align: center;
+}
+.canvas-wrap {
+  display: inline-block;
+  border: 4px solid #2c1810;
+  box-shadow: inset 0 0 30px rgba(0,0,0,0.7), 6px 6px 0 #1a1a1a;
+  background: #000;
+  line-height: 0;
+}
+canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+.hint {
+  margin-top: 10px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  color: #aaa;
+  letter-spacing: 1px;
+  line-height: 1.6;
+}
+
+.footer-bar {
+  text-align: center;
+  padding: 10px;
+  background: #2c1810;
+  color: #ffd900;
+  font-size: 11px;
+  border-top: 4px solid #2c1810;
+}
+.footer-bar a { color: #ffd900; }
+.footer-bar a:hover { color: #fff; }
+</style>
+</head>
+<body>
+
+<div class="frame">
+
+<div class="stripes-bar"></div>
+
+<div class="header">
+  <h1>~ CAPTAIN PLANET SAVES THE DAY! ~</h1>
+  <div class="sub">A bullet hell adventure!</div>
+</div>
+
+<div class="game-area">
+  <div class="canvas-wrap">
+    <canvas id="game" width="640" height="480"></canvas>
+  </div>
+  <div class="hint">
+    &uarr;&darr;&larr;&rarr; move &nbsp;&middot;&nbsp; SPACE pause/advance &nbsp;&middot;&nbsp; ESC pause<br>
+    <span style="color:#666;">DEBUG: 1=red &middot; 2=blue &middot; 3=purple &middot; 4=green</span>
+  </div>
+</div>
+
+<div class="footer-bar">
+  <a href="../kids-zone.html">&larr; Back to Kids Zone</a>
+</div>
+
+</div>
+
+<script>
+'use strict';
+
+// ============================================================
+//  Captain Planet Saves the Day! — engine
+// ============================================================
+//  Bullet-hell with Undertale-style "states" controlling player
+//  movement physics. State is shown as the colored outline of a
+//  square hitbox around the Earth sprite.
+//
+//  This is the *engine only*. Boss attack patterns, real cutscene
+//  scripts, music, and victory flow are intentionally minimal.
+// ============================================================
+
+// ---------- Canvas ----------
+const CANVAS_W = 640;
+const CANVAS_H = 480;
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+// ---------- World layout ----------
+const ARENA = { x: 140, y: 140, w: 360, h: 280 };  // playfield box
+const BOSS_ZONE = { x: 20, y: 30, w: CANVAS_W - 40, h: 90 };
+
+// ---------- Player states ----------
+const S_RED    = 'red';    // free 4-dir movement
+const S_BLUE   = 'blue';   // gravity + jump
+const S_PURPLE = 'purple'; // grid-locked
+const S_GREEN  = 'green';  // locked-center, shielded
+
+const STATE_COLORS = {
+  red:    '#ff3344',
+  blue:   '#3a9bff',
+  purple: '#c845ff',
+  green:  '#3aff66',
+};
+
+// ---------- Tunables ----------
+const PLAYER_HITBOX = 20;       // px, square side
+const PLAYER_VISUAL_R = 11;     // Earth radius
+
+// RED
+const RED_SPEED = 220;          // px/sec
+
+// BLUE
+const BLUE_GRAVITY = 700;       // px/sec^2
+const BLUE_JUMP_VEL = -380;     // px/sec
+const BLUE_HORIZ_SPEED = 200;
+const BLUE_TERMINAL = 360;
+
+// PURPLE
+const PURPLE_GRID = 40;         // px between gridlines
+const PURPLE_MOVE_DURATION = 0.12; // sec per cell
+
+// GREEN
+const GREEN_SHIELD_R = 32;
+
+// Bullets
+const PLAYER_FIRE_INTERVAL = 0.1; // sec
+const PLAYER_BULLET_SPEED = 420;  // px/sec
+const PLAYER_BULLET_R = 3;
+const ENEMY_BULLET_R = 5;
+const POST_HIT_IFRAMES = 0.6;     // sec
+
+// Boss
+const BOSS_W = 96;
+const BOSS_H = 68;
+const BOSS_SWEEP_SPEED = 90;      // px/sec L↔R
+
+// Cutscene
+const CUTSCENE_TYPING_CPS = 38;   // chars per second
+
+// ---------- State ----------
+const player = {
+  x: ARENA.x + ARENA.w / 2,
+  y: ARENA.y + ARENA.h - 60,
+  vx: 0, vy: 0,
+  hp: 1, maxHp: 1,
+  state: S_RED,
+  invincible: false,
+  iframes: 0,
+  fireCooldown: 0,
+  // PURPLE state movement target
+  gridMoving: false,
+  gridFromX: 0, gridFromY: 0,
+  gridToX: 0, gridToY: 0,
+  gridT: 0,
+};
+
+const boss = {
+  x: CANVAS_W / 2,
+  y: BOSS_ZONE.y + BOSS_ZONE.h / 2,
+  vx: BOSS_SWEEP_SPEED,
+  hp: 2000, maxHp: 2000,        // placeholder; tune with real attacks
+  invincible: true,             // until intro cutscene ends
+  flashTimer: 0,                // visual feedback on hit
+};
+
+const playerBullets = [];      // {x, y, vy}
+const enemyBullets  = [];      // {x, y, vx, vy, r?, color?}
+
+const game = {
+  paused: true,                 // starts paused per spec
+  introPlayed: false,           // first unpause triggers intro cutscene
+  over: false,                  // true on death
+  victory: false,               // true on boss kill
+  fpsAvg: 60,
+};
+
+// Cutscene: a sequence of {speaker, text} lines.
+// Speaker is 'boss' or 'player'; text box renders next to that figure.
+const cutscene = {
+  active: false,
+  lines: [],
+  index: 0,
+  charT: 0,           // typing animation: how many chars revealed
+  done: false,        // current line fully revealed?
+  onDone: null,       // callback when cutscene completes
+};
+
+const stars = makeStars(80);
+
+// Background music handle (created at first user gesture).
+let bgm = null;
+
+// ---------- Helpers ----------
+function makeStars(n) {
+  const arr = [];
+  for (let i = 0; i < n; i++) {
+    arr.push({
+      x: Math.random() * CANVAS_W,
+      y: Math.random() * CANVAS_H,
+      r: Math.random() < 0.85 ? 1 : 2,
+      twinkle: Math.random() * Math.PI * 2,
+      speed: 0.5 + Math.random() * 2,
+    });
+  }
+  return arr;
+}
+
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+function rectsOverlap(ax, ay, aw, ah, bx, by, bw, bh) {
+  return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+}
+function pointInRect(px, py, rx, ry, rw, rh) {
+  return px >= rx && px <= rx + rw && py >= ry && py <= ry + rh;
+}
+
+// Snap a coord to the nearest grid intersection inside the arena.
+function snapGrid(x, y) {
+  const gx = Math.round((x - ARENA.x) / PURPLE_GRID) * PURPLE_GRID + ARENA.x;
+  const gy = Math.round((y - ARENA.y) / PURPLE_GRID) * PURPLE_GRID + ARENA.y;
+  return [
+    clamp(gx, ARENA.x, ARENA.x + ARENA.w),
+    clamp(gy, ARENA.y, ARENA.y + ARENA.h),
+  ];
+}
+
+// ---------- State setters ----------
+function setState(newState) {
+  if (player.state === newState) return;
+  player.state = newState;
+  player.vx = 0;
+  player.vy = 0;
+  player.gridMoving = false;
+
+  if (newState === S_PURPLE) {
+    const [gx, gy] = snapGrid(player.x, player.y);
+    player.x = gx; player.y = gy;
+    player.gridFromX = gx; player.gridFromY = gy;
+    player.gridToX = gx;   player.gridToY = gy;
+  } else if (newState === S_GREEN) {
+    player.x = ARENA.x + ARENA.w / 2;
+    player.y = ARENA.y + ARENA.h / 2;
+  }
+}
+
+// ---------- Cutscenes ----------
+// playCutscene([{speaker:'boss', text:'...'}, ...], onDoneCallback)
+function playCutscene(lines, onDone) {
+  cutscene.active = true;
+  cutscene.lines = lines;
+  cutscene.index = 0;
+  cutscene.charT = 0;
+  cutscene.done = false;
+  cutscene.onDone = onDone || null;
+  player.invincible = true;
+  boss.invincible = true;
+}
+
+function advanceCutscene() {
+  if (!cutscene.active) return;
+  if (!cutscene.done) {
+    // Reveal the rest of this line instantly.
+    cutscene.charT = cutscene.lines[cutscene.index].text.length;
+    cutscene.done = true;
+    return;
+  }
+  cutscene.index += 1;
+  if (cutscene.index >= cutscene.lines.length) {
+    endCutscene();
+  } else {
+    cutscene.charT = 0;
+    cutscene.done = false;
+  }
+}
+
+function endCutscene() {
+  const cb = cutscene.onDone;
+  cutscene.active = false;
+  cutscene.lines = [];
+  cutscene.index = 0;
+  cutscene.charT = 0;
+  cutscene.done = false;
+  cutscene.onDone = null;
+  player.invincible = false;
+  boss.invincible = false;
+  if (cb) cb();
+}
+
+// ---------- Intro cutscene (placeholder content) ----------
+// Replaced when the real script lands.
+function getIntroLines() {
+  return [
+    { speaker: 'boss',   text: "Mwahaha! At LAST we meet, Captain Planet!" },
+    { speaker: 'boss',   text: "This world chokes on my smog! And you... cannot save it." },
+    { speaker: 'player', text: "Your reign of pollution ends here, fiend!" },
+    { speaker: 'player', text: "By the powers of EARTH... I will not yield." },
+    { speaker: 'boss',   text: "Then DIE, hero." },
+  ];
+}
+
+// ---------- Pause / unpause / death / victory ----------
+function unpause() {
+  if (game.over || game.victory) {
+    resetGame();
+    return;
+  }
+  game.paused = false;
+  if (!game.introPlayed) {
+    game.introPlayed = true;
+    playCutscene(getIntroLines(), () => {
+      // Real attack pattern goes here later.
+    });
+  }
+}
+
+function pause() {
+  if (game.over || game.victory) return;
+  if (cutscene.active) return; // can't pause mid-cutscene
+  game.paused = true;
+}
+
+function resetGame() {
+  player.x = ARENA.x + ARENA.w / 2;
+  player.y = ARENA.y + ARENA.h - 60;
+  player.vx = 0; player.vy = 0;
+  player.hp = player.maxHp;
+  player.state = S_RED;
+  player.invincible = false;
+  player.iframes = 0;
+  player.fireCooldown = 0;
+  player.gridMoving = false;
+
+  boss.x = CANVAS_W / 2;
+  boss.y = BOSS_ZONE.y + BOSS_ZONE.h / 2;
+  boss.vx = BOSS_SWEEP_SPEED;
+  boss.hp = boss.maxHp;
+  boss.invincible = true;
+  boss.flashTimer = 0;
+
+  playerBullets.length = 0;
+  enemyBullets.length = 0;
+
+  game.paused = true;
+  game.introPlayed = false;
+  game.over = false;
+  game.victory = false;
+
+  cutscene.active = false;
+  cutscene.lines = [];
+  cutscene.index = 0;
+  cutscene.charT = 0;
+  cutscene.done = false;
+  cutscene.onDone = null;
+}
+
+function killPlayer() {
+  game.over = true;
+}
+
+// ---------- Input ----------
+const keys = new Set();
+
+window.addEventListener('keydown', (e) => {
+  // Don't swallow keys while typing in a form somewhere else on the page
+  if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+
+  // Game-control keys we care about
+  const interesting = [
+    'ArrowUp','ArrowDown','ArrowLeft','ArrowRight',
+    ' ','Enter','Escape',
+    '1','2','3','4',
+  ];
+  if (interesting.includes(e.key)) e.preventDefault();
+
+  if (e.key === 'Escape') {
+    if (!game.paused && !cutscene.active && !game.over && !game.victory) {
+      pause();
+    }
+    return;
+  }
+
+  if (e.key === ' ' || e.key === 'Enter') {
+    if (cutscene.active) {
+      advanceCutscene();
+      return;
+    }
+    if (game.paused || game.over || game.victory) {
+      unpause();
+      return;
+    }
+    return;
+  }
+
+  // Debug state hot-keys (will be replaced by attack-pattern triggers).
+  if (!game.paused && !cutscene.active && !game.over && !game.victory) {
+    if (e.key === '1') setState(S_RED);
+    if (e.key === '2') setState(S_BLUE);
+    if (e.key === '3') setState(S_PURPLE);
+    if (e.key === '4') setState(S_GREEN);
+  }
+
+  keys.add(e.key);
+});
+window.addEventListener('keyup', (e) => { keys.delete(e.key); });
+window.addEventListener('blur', () => { keys.clear(); });
+
+// ---------- Update ----------
+function isPlayingActive() {
+  return !game.paused && !game.over && !game.victory && !cutscene.active;
+}
+
+function updatePlayer(dt) {
+  // I-frames after a hit
+  if (player.iframes > 0) player.iframes = Math.max(0, player.iframes - dt);
+
+  if (!isPlayingActive()) {
+    // Cutscene/pause: clear movement and input residue
+    player.vx = 0; player.vy = 0;
+    player.fireCooldown = 0;
+    return;
+  }
+
+  switch (player.state) {
+    case S_RED:    updatePlayerRed(dt);    break;
+    case S_BLUE:   updatePlayerBlue(dt);   break;
+    case S_PURPLE: updatePlayerPurple(dt); break;
+    case S_GREEN:  updatePlayerGreen(dt);  break;
+  }
+
+  // Player auto-fires upward (stream of bullets)
+  player.fireCooldown -= dt;
+  if (player.fireCooldown <= 0) {
+    player.fireCooldown = PLAYER_FIRE_INTERVAL;
+    playerBullets.push({
+      x: player.x,
+      y: player.y - PLAYER_HITBOX / 2,
+      vy: -PLAYER_BULLET_SPEED,
+    });
+  }
+}
+
+function updatePlayerRed(dt) {
+  let dx = 0, dy = 0;
+  if (keys.has('ArrowLeft'))  dx -= 1;
+  if (keys.has('ArrowRight')) dx += 1;
+  if (keys.has('ArrowUp'))    dy -= 1;
+  if (keys.has('ArrowDown'))  dy += 1;
+  // Normalize diagonal
+  if (dx !== 0 && dy !== 0) { dx *= 0.7071; dy *= 0.7071; }
+  player.x += dx * RED_SPEED * dt;
+  player.y += dy * RED_SPEED * dt;
+  clampPlayerToArena();
+}
+
+function updatePlayerBlue(dt) {
+  // Horizontal
+  let dx = 0;
+  if (keys.has('ArrowLeft'))  dx -= 1;
+  if (keys.has('ArrowRight')) dx += 1;
+  player.x += dx * BLUE_HORIZ_SPEED * dt;
+
+  // Gravity
+  player.vy += BLUE_GRAVITY * dt;
+  if (player.vy > BLUE_TERMINAL) player.vy = BLUE_TERMINAL;
+  player.y += player.vy * dt;
+
+  // Jump (UP)
+  // Only jump when grounded; "grounded" = touching the bottom of the arena
+  const groundY = ARENA.y + ARENA.h - PLAYER_HITBOX / 2;
+  if (player.y >= groundY) {
+    player.y = groundY;
+    player.vy = 0;
+    if (keys.has('ArrowUp')) player.vy = BLUE_JUMP_VEL;
+  }
+  clampPlayerToArena();
+}
+
+function updatePlayerPurple(dt) {
+  if (player.gridMoving) {
+    player.gridT += dt / PURPLE_MOVE_DURATION;
+    if (player.gridT >= 1) {
+      player.gridT = 1;
+      player.x = player.gridToX;
+      player.y = player.gridToY;
+      player.gridMoving = false;
+    } else {
+      // ease out
+      const t = player.gridT;
+      const e = 1 - (1 - t) * (1 - t);
+      player.x = player.gridFromX + (player.gridToX - player.gridFromX) * e;
+      player.y = player.gridFromY + (player.gridToY - player.gridFromY) * e;
+    }
+    return;
+  }
+  // Pick a direction; prioritize horizontal over vertical so diagonals don't lock
+  let dx = 0, dy = 0;
+  if (keys.has('ArrowLeft'))  dx = -1;
+  if (keys.has('ArrowRight')) dx = +1;
+  if (dx === 0) {
+    if (keys.has('ArrowUp'))   dy = -1;
+    if (keys.has('ArrowDown')) dy = +1;
+  }
+  if (dx === 0 && dy === 0) return;
+
+  const tx = player.x + dx * PURPLE_GRID;
+  const ty = player.y + dy * PURPLE_GRID;
+  if (tx < ARENA.x || tx > ARENA.x + ARENA.w) return;
+  if (ty < ARENA.y || ty > ARENA.y + ARENA.h) return;
+
+  player.gridFromX = player.x;
+  player.gridFromY = player.y;
+  player.gridToX = tx;
+  player.gridToY = ty;
+  player.gridT = 0;
+  player.gridMoving = true;
+}
+
+function updatePlayerGreen(dt) {
+  // Locked at center. Position is fixed to arena center.
+  player.x = ARENA.x + ARENA.w / 2;
+  player.y = ARENA.y + ARENA.h / 2;
+}
+
+function clampPlayerToArena() {
+  const half = PLAYER_HITBOX / 2;
+  player.x = clamp(player.x, ARENA.x + half, ARENA.x + ARENA.w - half);
+  player.y = clamp(player.y, ARENA.y + half, ARENA.y + ARENA.h - half);
+}
+
+function updateBoss(dt) {
+  if (boss.flashTimer > 0) boss.flashTimer -= dt;
+  if (!isPlayingActive()) return;
+
+  // Sweep L↔R inside BOSS_ZONE.
+  boss.x += boss.vx * dt;
+  const left  = BOSS_ZONE.x + BOSS_W / 2;
+  const right = BOSS_ZONE.x + BOSS_ZONE.w - BOSS_W / 2;
+  if (boss.x < left)  { boss.x = left;  boss.vx =  Math.abs(boss.vx); }
+  if (boss.x > right) { boss.x = right; boss.vx = -Math.abs(boss.vx); }
+
+  // Real attack patterns hook in here. No bullets fired yet.
+}
+
+function updateBullets(dt) {
+  // Player bullets — travel up, despawn off-screen
+  for (let i = playerBullets.length - 1; i >= 0; i--) {
+    const b = playerBullets[i];
+    b.y += b.vy * dt;
+    if (b.y < -10) playerBullets.splice(i, 1);
+  }
+  // Enemy bullets — travel along their velocity vector
+  for (let i = enemyBullets.length - 1; i >= 0; i--) {
+    const b = enemyBullets[i];
+    b.x += (b.vx || 0) * dt;
+    b.y += (b.vy || 0) * dt;
+    if (b.x < -20 || b.x > CANVAS_W + 20 || b.y < -20 || b.y > CANVAS_H + 20) {
+      enemyBullets.splice(i, 1);
+    }
+  }
+}
+
+function checkCollisions() {
+  // Player bullets vs boss (rect)
+  if (!boss.invincible) {
+    const bx = boss.x - BOSS_W / 2;
+    const by = boss.y - BOSS_H / 2;
+    for (let i = playerBullets.length - 1; i >= 0; i--) {
+      const b = playerBullets[i];
+      if (pointInRect(b.x, b.y, bx, by, BOSS_W, BOSS_H)) {
+        playerBullets.splice(i, 1);
+        boss.hp -= 1;
+        boss.flashTimer = 0.08;
+        if (boss.hp <= 0) {
+          boss.hp = 0;
+          game.victory = true;
+        }
+      }
+    }
+  }
+
+  // Enemy bullets vs player hitbox (square)
+  if (!player.invincible && player.iframes <= 0 && !game.over) {
+    const half = PLAYER_HITBOX / 2;
+    const px = player.x - half, py = player.y - half;
+    for (let i = enemyBullets.length - 1; i >= 0; i--) {
+      const b = enemyBullets[i];
+      // GREEN shield: bullets that touch the shield ring vanish but
+      // do no damage.
+      if (player.state === S_GREEN) {
+        const dx = b.x - player.x, dy = b.y - player.y;
+        if (dx * dx + dy * dy <= GREEN_SHIELD_R * GREEN_SHIELD_R) {
+          enemyBullets.splice(i, 1);
+        }
+        continue;
+      }
+      if (pointInRect(b.x, b.y, px, py, PLAYER_HITBOX, PLAYER_HITBOX)) {
+        enemyBullets.splice(i, 1);
+        player.hp -= 1;
+        player.iframes = POST_HIT_IFRAMES;
+        if (player.hp <= 0) {
+          player.hp = 0;
+          killPlayer();
+          break;
+        }
+      }
+    }
+  }
+}
+
+function updateCutscene(dt) {
+  if (!cutscene.active || cutscene.done) return;
+  const line = cutscene.lines[cutscene.index];
+  if (!line) return;
+  cutscene.charT += CUTSCENE_TYPING_CPS * dt;
+  if (cutscene.charT >= line.text.length) {
+    cutscene.charT = line.text.length;
+    cutscene.done = true;
+  }
+}
+
+function updateStars(dt) {
+  for (const s of stars) {
+    s.twinkle += dt * s.speed;
+  }
+}
+
+// ---------- Render ----------
+function drawStars() {
+  for (const s of stars) {
+    const alpha = 0.5 + 0.5 * Math.sin(s.twinkle);
+    ctx.fillStyle = 'rgba(255,255,255,' + alpha.toFixed(3) + ')';
+    ctx.fillRect(s.x, s.y, s.r, s.r);
+  }
+}
+
+function drawArena() {
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#ffffff';
+  ctx.strokeRect(ARENA.x + 0.5, ARENA.y + 0.5, ARENA.w, ARENA.h);
+
+  // PURPLE state shows the grid.
+  if (player.state === S_PURPLE) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(200, 100, 255, 0.35)';
+    ctx.lineWidth = 1;
+    for (let gx = ARENA.x; gx <= ARENA.x + ARENA.w; gx += PURPLE_GRID) {
+      ctx.beginPath();
+      ctx.moveTo(gx + 0.5, ARENA.y);
+      ctx.lineTo(gx + 0.5, ARENA.y + ARENA.h);
+      ctx.stroke();
+    }
+    for (let gy = ARENA.y; gy <= ARENA.y + ARENA.h; gy += PURPLE_GRID) {
+      ctx.beginPath();
+      ctx.moveTo(ARENA.x,           gy + 0.5);
+      ctx.lineTo(ARENA.x + ARENA.w, gy + 0.5);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+function drawEarth(x, y) {
+  // Ocean
+  ctx.fillStyle = '#1565c0';
+  ctx.beginPath();
+  ctx.arc(x, y, PLAYER_VISUAL_R, 0, Math.PI * 2);
+  ctx.fill();
+  // Continents (rough green blobs)
+  ctx.fillStyle = '#2e7d32';
+  ctx.beginPath();
+  ctx.ellipse(x - PLAYER_VISUAL_R * 0.35, y - PLAYER_VISUAL_R * 0.2,
+              PLAYER_VISUAL_R * 0.4, PLAYER_VISUAL_R * 0.28, 0.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(x + PLAYER_VISUAL_R * 0.15, y + PLAYER_VISUAL_R * 0.25,
+              PLAYER_VISUAL_R * 0.32, PLAYER_VISUAL_R * 0.42, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(x + PLAYER_VISUAL_R * 0.4, y - PLAYER_VISUAL_R * 0.15,
+              PLAYER_VISUAL_R * 0.3, PLAYER_VISUAL_R * 0.22, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawPlayer() {
+  // I-frames: blink the sprite
+  const showSprite = player.iframes <= 0 || (Math.floor(player.iframes * 16) % 2 === 0);
+  if (showSprite) drawEarth(player.x, player.y);
+
+  // GREEN state: big shield ring around the player.
+  if (player.state === S_GREEN) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(80, 255, 120, 0.85)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, GREEN_SHIELD_R, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(80, 255, 120, 0.25)';
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, GREEN_SHIELD_R, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // State outline (the visual hitbox).
+  ctx.save();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = STATE_COLORS[player.state];
+  const half = PLAYER_HITBOX / 2;
+  ctx.strokeRect(
+    Math.round(player.x - half) + 0.5,
+    Math.round(player.y - half) + 0.5,
+    PLAYER_HITBOX,
+    PLAYER_HITBOX,
+  );
+  ctx.restore();
+}
+
+function drawBoss() {
+  // Smog aura — soft purple radial glow
+  const grad = ctx.createRadialGradient(boss.x, boss.y, 4, boss.x, boss.y, BOSS_W);
+  grad.addColorStop(0, 'rgba(110, 30, 150, 0.7)');
+  grad.addColorStop(1, 'rgba(110, 30, 150, 0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(boss.x - BOSS_W, boss.y - BOSS_H, BOSS_W * 2, BOSS_H * 2);
+
+  // Body — humanoid figure built out of small green tiles.
+  // Pattern (1 = tile):
+  //   ..##....##..
+  //   ..####.####.
+  //   ..##########
+  //   .############
+  //   .##########..
+  //   ..########..
+  //   ...######...
+  //   ...##..##...
+  const TILE = 8;
+  const pattern = [
+    "..##....##..",
+    "..####.####.",
+    "..##########",
+    ".############",
+    ".##########..",
+    "..########..",
+    "...######...",
+    "...##..##...",
+  ];
+  const pw = pattern[0].length * TILE;
+  const ph = pattern.length * TILE;
+  const ox = Math.round(boss.x - pw / 2);
+  const oy = Math.round(boss.y - ph / 2);
+
+  const flash = boss.flashTimer > 0;
+  for (let row = 0; row < pattern.length; row++) {
+    for (let col = 0; col < pattern[row].length; col++) {
+      if (pattern[row][col] === '#') {
+        ctx.fillStyle = flash ? '#ffffff' : '#3aa53a';
+        ctx.fillRect(ox + col * TILE, oy + row * TILE, TILE, TILE);
+        // tile shading
+        if (!flash) {
+          ctx.fillStyle = '#2c7c2c';
+          ctx.fillRect(ox + col * TILE, oy + row * TILE + TILE - 2, TILE, 2);
+          ctx.fillRect(ox + col * TILE + TILE - 2, oy + row * TILE, 2, TILE);
+        }
+      }
+    }
+  }
+  // Glowing red eyes
+  ctx.fillStyle = '#ff3030';
+  ctx.fillRect(ox + 3 * TILE + 2, oy + 1 * TILE + 2, 2, 2);
+  ctx.fillRect(ox + 8 * TILE + 2, oy + 1 * TILE + 2, 2, 2);
+}
+
+function drawBullets() {
+  // Player bullets — bright cyan
+  ctx.fillStyle = '#bff7ff';
+  for (const b of playerBullets) {
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, PLAYER_BULLET_R, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Player bullet glow
+  ctx.fillStyle = 'rgba(180, 230, 255, 0.4)';
+  for (const b of playerBullets) {
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, PLAYER_BULLET_R + 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Enemy bullets — purple smog orbs
+  for (const b of enemyBullets) {
+    const r = b.r || ENEMY_BULLET_R;
+    const c = b.color || '#c845ff';
+    ctx.fillStyle = c;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(200, 70, 255, 0.35)';
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, r + 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawHUD() {
+  // Player HP
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '14px "Courier New", monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText('HP', 20, CANVAS_H - 22);
+  for (let i = 0; i < player.maxHp; i++) {
+    const x = 50 + i * 18;
+    const y = CANVAS_H - 32;
+    ctx.fillStyle = i < player.hp ? '#ff3344' : '#552222';
+    ctx.fillRect(x, y, 14, 14);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, 14, 14);
+  }
+
+  // Boss HP bar (top)
+  const bossBarW = 360;
+  const bossBarH = 8;
+  const bx = (CANVAS_W - bossBarW) / 2;
+  const by = 10;
+  ctx.fillStyle = '#330033';
+  ctx.fillRect(bx, by, bossBarW, bossBarH);
+  ctx.fillStyle = '#aa44ff';
+  ctx.fillRect(bx, by, bossBarW * (boss.hp / boss.maxHp), bossBarH);
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(bx + 0.5, by + 0.5, bossBarW, bossBarH);
+  ctx.fillStyle = '#fff';
+  ctx.font = '10px "Courier New", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('POLLUTION MAN', CANVAS_W / 2, by - 1);
+
+  // State label
+  ctx.font = '12px "Courier New", monospace';
+  ctx.textAlign = 'right';
+  ctx.fillStyle = STATE_COLORS[player.state];
+  ctx.fillText('[' + player.state.toUpperCase() + ']', CANVAS_W - 20, CANVAS_H - 22);
+}
+
+function drawTextBox(speaker, text, fullText) {
+  // Position: above arena for boss, below arena for player.
+  const isBoss = speaker === 'boss';
+  const w = 460;
+  const h = 70;
+  const x = (CANVAS_W - w) / 2;
+  const y = isBoss ? ARENA.y - h - 14 : ARENA.y + ARENA.h + 14;
+
+  // Backing
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.92)';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x + 0.5, y + 0.5, w, h);
+
+  // Speaker label
+  ctx.font = 'bold 12px "Courier New", monospace';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = isBoss ? '#c845ff' : '#3a9bff';
+  ctx.fillText(isBoss ? 'POLLUTION MAN' : 'CAPTAIN PLANET', x + 10, y + 18);
+
+  // Text
+  ctx.font = '14px "Courier New", monospace';
+  ctx.fillStyle = '#ffffff';
+  wrapText(text, x + 10, y + 38, w - 20, 18);
+
+  // Continue indicator when line is fully revealed
+  if (text.length === fullText.length) {
+    ctx.fillStyle = '#ffd900';
+    const t = performance.now() / 250;
+    const ind = (Math.sin(t) > 0) ? '▼' : ' ';
+    ctx.font = '14px "Courier New", monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(ind, x + w - 10, y + h - 10);
+  }
+}
+
+function wrapText(text, x, y, maxW, lineH) {
+  const words = text.split(' ');
+  let line = '';
+  let cy = y;
+  for (let i = 0; i < words.length; i++) {
+    const test = line ? line + ' ' + words[i] : words[i];
+    const m = ctx.measureText(test);
+    if (m.width > maxW && line) {
+      ctx.fillText(line, x, cy);
+      line = words[i];
+      cy += lineH;
+    } else {
+      line = test;
+    }
+  }
+  if (line) ctx.fillText(line, x, cy);
+}
+
+function drawCutscene() {
+  if (!cutscene.active) return;
+  const line = cutscene.lines[cutscene.index];
+  if (!line) return;
+  const shown = line.text.slice(0, Math.floor(cutscene.charT));
+  drawTextBox(line.speaker, shown, line.text);
+}
+
+function drawOverlay(text, sub) {
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.font = 'bold 32px "Courier New", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffd900';
+  ctx.fillText(text, CANVAS_W / 2, CANVAS_H / 2 - 8);
+  if (sub) {
+    ctx.font = '14px "Courier New", monospace';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(sub, CANVAS_W / 2, CANVAS_H / 2 + 22);
+  }
+}
+
+function render() {
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+  drawStars();
+  drawBoss();
+  drawArena();
+  drawPlayer();
+  drawBullets();
+  drawHUD();
+  drawCutscene();
+
+  if (game.over) {
+    drawOverlay('GAME OVER', 'Press SPACE to retry');
+  } else if (game.victory) {
+    drawOverlay('VICTORY!', 'Press SPACE to play again');
+  } else if (game.paused && !cutscene.active) {
+    drawOverlay(
+      game.introPlayed ? 'PAUSED' : 'PRESS SPACE TO BEGIN',
+      game.introPlayed ? 'Press SPACE to resume' : null,
+    );
+  }
+}
+
+// ---------- Main loop ----------
+let lastT = 0;
+function frame(now) {
+  if (!lastT) lastT = now;
+  let dt = (now - lastT) / 1000;
+  lastT = now;
+  if (dt > 0.05) dt = 0.05; // clamp on tab-switch / breakpoint
+  game.fpsAvg = game.fpsAvg * 0.95 + (1 / dt) * 0.05;
+
+  updateStars(dt);
+
+  if (cutscene.active) {
+    updateCutscene(dt);
+  } else if (!game.paused && !game.over && !game.victory) {
+    updatePlayer(dt);
+    updateBoss(dt);
+    updateBullets(dt);
+    checkCollisions();
+  }
+
+  render();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>
