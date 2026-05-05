@@ -327,8 +327,6 @@ const state = {
   // Hallway
   hallwayLen: 0,
   hallwayReturnHint: { x: 0, y: 0 },
-  // Music
-  musicPos: 0,
   // Hidden timer
   gameStart: 0,
   // Tile cache (sparse, keyed by "x,y")
@@ -711,8 +709,11 @@ function enterHallway(returnX, returnY) {
   state.py = 0.5;
   state.pAngle = 0; // east
   state.animType = null;
-  // Pause music, save position so we can resume on exit.
-  state.musicPos = bgm.currentTime || 0;
+  // Pause music — pause() retains the playback position so the
+  // matching play() in exitHallway resumes from where we left off.
+  // Explicitly assigning currentTime on the way back was causing
+  // the track to restart from 0 in some browsers, so we just rely
+  // on the audio element's native pause/resume semantics.
   try { bgm.pause(); } catch (e) {}
 }
 
@@ -739,9 +740,10 @@ function exitHallway() {
   state.pAngle = (Math.floor(Math.random() * 4)) * (Math.PI / 2);
   state.animType = null;
 
-  // Resume music from where it left off.
+  // Resume music from where it left off — pause() preserved the
+  // playback position, so play() picks up there. No currentTime
+  // assignment, which is what was forcing the restart.
   try {
-    bgm.currentTime = state.musicPos;
     const p = bgm.play();
     if (p && p.catch) p.catch(() => {});
   } catch (e) {}
