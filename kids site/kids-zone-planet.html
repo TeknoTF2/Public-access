@@ -2796,7 +2796,10 @@ Object.assign(ATTACKS, {
     },
   },
 
-  // L+R bullets converge on each line at staggered speeds.
+  // L+R bullets converge on each line at staggered speeds. Each
+  // round only fires on TWO of the four lines (picked at random),
+  // so the player always has two clear safe lanes to jump to —
+  // hitting all four lines per round left no escape route.
   CONVERGING_RAILS: {
     name: 'CONVERGING RAILS',
     duration: 7.5,
@@ -2811,7 +2814,14 @@ Object.assign(ATTACKS, {
       if (s.round < 2 && s.roundT >= 2.5) {
         s.round++;
         s.roundT = 0;
-        for (let i = 0; i < PURPLE_LINES; i++) {
+        // Shuffle line indices and take the first two.
+        const lanes = [0, 1, 2, 3];
+        for (let k = lanes.length - 1; k > 0; k--) {
+          const j = Math.floor(Math.random() * (k + 1));
+          [lanes[k], lanes[j]] = [lanes[j], lanes[k]];
+        }
+        const chosen = lanes.slice(0, 2);
+        for (const i of chosen) {
           const ly = purpleLineY(i);
           const sp = (100 + i * 22 + s.round * 30) * P2_SPEED;
           spawnBullet(ARENA.x - 6, ly, sp, 0, { color: '#c845ff' });
@@ -4237,8 +4247,14 @@ function checkCollisions() {
     }
   }
 
-  // Enemy bullets vs player hitbox (square, with bullet radius)
-  if (!player.invincible && player.iframes <= 0 && !game.over) {
+  // Enemy bullets vs player hitbox (square, with bullet radius).
+  // Damage is capped at 1 per "hit event": once the player takes a
+  // hit and i-frames are set, any other bullet that connects this
+  // frame is still consumed (so it doesn't linger to hit again on
+  // the next frame) but does not deal additional damage. Without
+  // this, a multi-bullet attack like GEYSER's column could connect
+  // 3+ bullets in the same frame and one-shot a full-HP player.
+  if (!player.invincible && !game.over) {
     const half = PLAYER_HITBOX / 2;
     for (let i = enemyBullets.length - 1; i >= 0; i--) {
       const b = enemyBullets[i];
@@ -4270,12 +4286,18 @@ function checkCollisions() {
       }
 
       enemyBullets.splice(i, 1);
-      player.hp -= 1;
-      player.iframes = POST_HIT_IFRAMES;
-      if (player.hp <= 0) {
-        player.hp = 0;
-        killPlayer();
-        break;
+      // Only the first hit in any i-frame window actually does
+      // damage. Subsequent overlapping bullets the same frame still
+      // get consumed (so they don't linger and chain-hit) but they
+      // can't push HP further down.
+      if (player.iframes <= 0) {
+        player.hp -= 1;
+        player.iframes = POST_HIT_IFRAMES;
+        if (player.hp <= 0) {
+          player.hp = 0;
+          killPlayer();
+          break;
+        }
       }
     }
   }
