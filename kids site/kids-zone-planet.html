@@ -2982,18 +2982,31 @@ Object.assign(ATTACKS, {
   // Sequential then simultaneous cardinal shots.
   CARDINAL_SHOTS: {
     name: 'CARDINAL SHOTS',
-    duration: 7.0,
+    duration: 7.5,
     init() {
       bossAI.state.t = 0;
       bossAI.state.fireT = 0;
       bossAI.state.cycleI = 0;
       bossAI.state.phase = 'sequential';
+      bossAI.state.pendingDir = -1;
+      bossAI.state.pendingT = 0;
     },
     update(dt) {
       const s = bossAI.state;
       bossSweep(dt, 0.2);
       s.t += dt;
       s.fireT += dt;
+      // Pending second-half-of-pair fire — held back so the pair
+      // is fast-sequential instead of simultaneous (a single shield
+      // can't block two opposite directions at once, but it can
+      // snap between them with a 0.35s gap).
+      if (s.pendingDir >= 0) {
+        s.pendingT += dt;
+        if (s.pendingT >= 0.35) {
+          _fireCardinal(s.pendingDir);
+          s.pendingDir = -1;
+        }
+      }
       if (s.phase === 'sequential') {
         const interval = (s.t < 3.5) ? 0.7 : 0.5;
         if (s.fireT >= interval) {
@@ -3001,17 +3014,17 @@ Object.assign(ATTACKS, {
           _fireCardinal(s.cycleI % 4);
           s.cycleI++;
         }
-        if (s.t >= 4.5) { s.phase = 'simultaneous'; s.fireT = 0; s.cycleI = 0; }
+        if (s.t >= 4.5) { s.phase = 'paired'; s.fireT = 0; s.cycleI = 0; }
       } else {
-        // Wider gap between simultaneous pairs. Pairs fire 1.4s
-        // apart (was 0.9s) so the player's i-frames clear between
-        // pairs and they can re-aim the shield without being
-        // mid-hitstun.
-        if (s.fireT >= 1.4) {
+        // Fast-sequential pairs — first half fires immediately,
+        // second half 0.35s later from the opposite cardinal.
+        // Both halves are individually blockable; the challenge
+        // is the snap-and-resnap timing.
+        if (s.fireT >= 1.4 && s.pendingDir < 0) {
           s.fireT = 0;
-          // Pairs: vertical or horizontal.
-          if (s.cycleI % 2 === 0) { _fireCardinal(0); _fireCardinal(2); }
-          else                    { _fireCardinal(1); _fireCardinal(3); }
+          if (s.cycleI % 2 === 0) { _fireCardinal(0); s.pendingDir = 2; }
+          else                    { _fireCardinal(1); s.pendingDir = 3; }
+          s.pendingT = 0;
           s.cycleI++;
         }
       }
@@ -3149,9 +3162,15 @@ Object.assign(ATTACKS, {
       const s = bossAI.state;
       bossSweep(dt, 0.2);
       s.relocateT += dt;
-      // Add second turret after the third relocation.
+      // Add second turret after the third relocation. The new
+      // turret's fireT is PHASED so it fires opposite of the first
+      // turret's cycle — alternating instead of simultaneous, so
+      // a single shield can actually snap between them.
       if (s.relocations >= 3 && s.turrets.length < 2) {
-        s.turrets.push({ edge: (s.turrets[0].edge + 2) % 4, fireT: 0 });
+        s.turrets.push({
+          edge: (s.turrets[0].edge + 2) % 4,
+          fireT: -0.275,             // half-cycle offset (cycle = 0.55s)
+        });
       }
       // Relocate.
       if (s.relocateT >= 2.5) {
@@ -3163,11 +3182,11 @@ Object.assign(ATTACKS, {
           t.edge = next;
         }
       }
-      // When two turrets are firing simultaneously the player can
-      // only shield one direction, so the second turret's stream
-      // hits unblocked. Slow each turret's fire rate when there
-      // are two active so the player can absorb a hit and recover
-      // in the i-frame window before the next bullet.
+      // Fire rates: single turret 0.32s, double-turret each turret
+      // fires every 0.55s but they're phased a half-cycle apart, so
+      // alternating shots arrive ~0.275s apart from opposite edges.
+      // The player can shield one, snap to the other, shield, snap
+      // back — every shot is blockable.
       const fireInterval = s.turrets.length > 1 ? 0.55 : 0.32;
       for (const t of s.turrets) {
         t.fireT += dt;
@@ -3214,21 +3233,16 @@ Object.assign(ATTACKS, {
         if (s.t >= 1.0) { s.phase = 'active'; s.t = 0; }
         return;
       }
-      // Stream from all four edges; heavy direction fires denser.
-      // The light directions are SPARSE — the player can only shield
-      // the heavy direction, so the light streams' job is to apply
-      // mild pressure during charge, not to constantly grind HP off
-      // through the i-frame ceiling. Light odds 0.25 → 0.10.
+      // Single dense stream from the heavy direction. Light streams
+      // were dropped: the player only has one shield, so any light
+      // bullet from a non-shield direction was forced damage by
+      // design. Now the entire challenge is tracking the heavy
+      // direction (which rotates after each clear) and holding the
+      // shield matched to it long enough to charge the counter.
       s.spawnT += dt;
       if (s.spawnT >= 0.18) {
         s.spawnT = 0;
-        for (let d = 0; d < 4; d++) {
-          const heavy = (d === s.heavy);
-          const odds = heavy ? 1.0 : 0.10;
-          if (Math.random() < odds) {
-            _fireCardinal(d, { speed: 180 });
-          }
-        }
+        _fireCardinal(s.heavy, { speed: 180 });
       }
       // Detect blocked bullets via the count delta.
       // (Simpler: track bullets that are aimed at player and disappear
