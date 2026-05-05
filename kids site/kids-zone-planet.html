@@ -1691,6 +1691,12 @@ function endPhase2Attack() {
   const id = bossAI.attack;
   bossAI.attack = null;
   clearAttackHooks();
+  // Wipe any in-flight bullets so leftover threats from the
+  // outgoing attack don't interfere with the next one. Without
+  // this, e.g. a Geyser column or an Alternating Current stream
+  // would still be onscreen when the next attack telegraphed,
+  // making patterns that don't account for them unsurvivable.
+  enemyBullets.length = 0;
   bossAI.attacksInSoul++;
   bossAI.counter++;
   // Downtime decreases as HP drops.
@@ -1730,7 +1736,12 @@ function updatePhase2AI(dt) {
       bossAI.attacksInSoul = 0;
       bossAI.targetAttacksInSoul = 2 + Math.floor(Math.random() * 2); // 2 or 3
       bossAI.soulNamedShown[bossAI.soul] = true;
-      startAttack(pickNextPhase2Attack());
+      // Grace period after the switch so the player can settle
+      // into the new physics (especially BLUE — they drop to the
+      // floor mid-air and need a beat before bullets start). The
+      // existing downtime tick in the !bossAI.attack branch will
+      // start the first attack of the new soul once this elapses.
+      bossAI.downtime = 1.5;
     }
     return;
   }
