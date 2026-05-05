@@ -3665,14 +3665,21 @@ const PHASE3_COMBOS = [
   { id: 'COMBO_1', soul: 'blue',   a1: 'ACID_RAIN',       a2: 'GRAVITY_WELL' },
   { id: 'COMBO_2', soul: 'purple', a1: 'SMOG_SPIRAL',     a2: 'TRACK_SWITCH' },
   { id: 'COMBO_3', soul: 'green',  a1: 'EXHAUST_PIPES',   a2: 'MACHINE_GUN_ROULETTE' },
-  { id: 'COMBO_4', soul: 'blue',   a1: 'PIPELINE_BURST',  a2: 'RISING_SMOG' },
+  // PIPELINE BURST + RISING SMOG forces the player to dodge falling
+  // bullets while smog rises from the floor — under BLUE soul's
+  // gravity-jump physics that pinned the player into impossible
+  // mid-air reads. RED gives free omnidirectional movement so the
+  // squeeze is actually survivable.
+  { id: 'COMBO_4', soul: 'red',    a1: 'PIPELINE_BURST',  a2: 'RISING_SMOG' },
   { id: 'COMBO_5', soul: 'purple', a1: 'TOXIC_CLOUD',     a2: 'CONVEYOR_BELT' },
   { id: 'COMBO_6', soul: 'green',  a1: 'CHEMICAL_RUNOFF', a2: 'RING_OF_FIRE' },
   { id: 'COMBO_7', soul: 'purple', a1: 'SMOG_WALL',       a2: 'WARNING_LANES' },
   { id: 'COMBO_8', soul: 'red',    a1: 'AIMED_BARRAGE',   a2: 'CONTAMINATION_ZONES' },
 ];
 
-const PHASE3_MODIFIERS = ['BOX_CRUSH', 'TEXT_BOX_ASSAULT', 'INVERSION', 'ERROR_FLOOD'];
+// ERROR_FLOOD was removed — the popup spam combined with concurrent
+// combo attacks left no readable space on screen.
+const PHASE3_MODIFIERS = ['BOX_CRUSH', 'TEXT_BOX_ASSAULT', 'INVERSION'];
 // SOUL_SCRAMBLE is held back as a one-shot ambush (handled separately).
 
 const FINAL_ATTACK_SEQUENCE = [
@@ -3981,14 +3988,10 @@ function updatePhase3Bark(dt) {
 // ---------- Game-breaking modifiers ----------
 function _startModifier() {
   const p3 = bossAI.phase3;
-  // ERROR_FLOOD should overlay a green soul combo at least once.
-  let pool = PHASE3_MODIFIERS.slice();
-  if (!p3.errorFloodUsedOnGreen && bossAI.soul === 'green') {
-    p3.activeModifier = 'ERROR_FLOOD';
-    p3.errorFloodUsedOnGreen = true;
-  } else {
-    p3.activeModifier = pool[Math.floor(Math.random() * pool.length)];
-  }
+  // ERROR_FLOOD was retired — the popup spam was unreadable on top of
+  // a live combo. Pick uniformly from the remaining modifiers.
+  const pool = PHASE3_MODIFIERS.slice();
+  p3.activeModifier = pool[Math.floor(Math.random() * pool.length)];
   p3.modifierT = 0;
   if (p3.activeModifier === 'BOX_CRUSH')        p3.modifierDur = 5.0;
   else if (p3.activeModifier === 'TEXT_BOX_ASSAULT') p3.modifierDur = 6.0;
@@ -4120,13 +4123,23 @@ function _updateFinalAttack(dt) {
   if (p3.finalT >= 8.0) {
     p3.finalStep++;
     if (p3.finalStep >= FINAL_ATTACK_SEQUENCE.length) {
-      // Done — silence beat, then expose.
+      // Done — silence beat, then expose. Mirror the Phase 2
+      // gauntlet ending: drop the boss to 1 HP, recenter him, and
+      // pop the player back to RED so they can move freely. Without
+      // this the player was stuck in the last step's GREEN soul
+      // (locked center, fires straight up) while the boss was off
+      // to one side, so the auto-fire never connected and the
+      // ending could never trigger.
       p3.finalDone = true;
       p3.slot1.attack = null;
       p3.slot2.attack = null;
       enemyBullets.length = 0;
       clearAttackHooks();
       boss.invincible = false;
+      boss.hp = 1;                       // single shot finishes it
+      boss.x = CANVAS_W / 2;
+      boss.vx = 0;
+      setState(S_RED);
     } else {
       _enterFinalStep(p3.finalStep);
     }
