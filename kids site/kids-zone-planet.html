@@ -2796,7 +2796,10 @@ Object.assign(ATTACKS, {
     },
   },
 
-  // L+R bullets converge on each line at staggered speeds.
+  // L+R bullets converge on each line at staggered speeds. Each
+  // round only fires on TWO of the four lines (picked at random),
+  // so the player always has two clear safe lanes to jump to —
+  // hitting all four lines per round left no escape route.
   CONVERGING_RAILS: {
     name: 'CONVERGING RAILS',
     duration: 7.5,
@@ -2811,7 +2814,14 @@ Object.assign(ATTACKS, {
       if (s.round < 2 && s.roundT >= 2.5) {
         s.round++;
         s.roundT = 0;
-        for (let i = 0; i < PURPLE_LINES; i++) {
+        // Shuffle line indices and take the first two.
+        const lanes = [0, 1, 2, 3];
+        for (let k = lanes.length - 1; k > 0; k--) {
+          const j = Math.floor(Math.random() * (k + 1));
+          [lanes[k], lanes[j]] = [lanes[j], lanes[k]];
+        }
+        const chosen = lanes.slice(0, 2);
+        for (const i of chosen) {
           const ly = purpleLineY(i);
           const sp = (100 + i * 22 + s.round * 30) * P2_SPEED;
           spawnBullet(ARENA.x - 6, ly, sp, 0, { color: '#c845ff' });
@@ -2972,18 +2982,31 @@ Object.assign(ATTACKS, {
   // Sequential then simultaneous cardinal shots.
   CARDINAL_SHOTS: {
     name: 'CARDINAL SHOTS',
-    duration: 7.0,
+    duration: 7.5,
     init() {
       bossAI.state.t = 0;
       bossAI.state.fireT = 0;
       bossAI.state.cycleI = 0;
       bossAI.state.phase = 'sequential';
+      bossAI.state.pendingDir = -1;
+      bossAI.state.pendingT = 0;
     },
     update(dt) {
       const s = bossAI.state;
       bossSweep(dt, 0.2);
       s.t += dt;
       s.fireT += dt;
+      // Pending second-half-of-pair fire — held back so the pair
+      // is fast-sequential instead of simultaneous (a single shield
+      // can't block two opposite directions at once, but it can
+      // snap between them with a 0.35s gap).
+      if (s.pendingDir >= 0) {
+        s.pendingT += dt;
+        if (s.pendingT >= 0.35) {
+          _fireCardinal(s.pendingDir);
+          s.pendingDir = -1;
+        }
+      }
       if (s.phase === 'sequential') {
         const interval = (s.t < 3.5) ? 0.7 : 0.5;
         if (s.fireT >= interval) {
@@ -2991,13 +3014,17 @@ Object.assign(ATTACKS, {
           _fireCardinal(s.cycleI % 4);
           s.cycleI++;
         }
-        if (s.t >= 4.5) { s.phase = 'simultaneous'; s.fireT = 0; s.cycleI = 0; }
+        if (s.t >= 4.5) { s.phase = 'paired'; s.fireT = 0; s.cycleI = 0; }
       } else {
-        if (s.fireT >= 0.9) {
+        // Fast-sequential pairs — first half fires immediately,
+        // second half 0.35s later from the opposite cardinal.
+        // Both halves are individually blockable; the challenge
+        // is the snap-and-resnap timing.
+        if (s.fireT >= 1.4 && s.pendingDir < 0) {
           s.fireT = 0;
-          // Pairs: vertical or horizontal.
-          if (s.cycleI % 2 === 0) { _fireCardinal(0); _fireCardinal(2); }
-          else                    { _fireCardinal(1); _fireCardinal(3); }
+          if (s.cycleI % 2 === 0) { _fireCardinal(0); s.pendingDir = 2; }
+          else                    { _fireCardinal(1); s.pendingDir = 3; }
+          s.pendingT = 0;
           s.cycleI++;
         }
       }
@@ -3064,11 +3091,15 @@ Object.assign(ATTACKS, {
       bossSweep(dt, 0.2);
       s.t += dt;
       s.fireT += dt;
-      // Phase 1: alternation; phase 2: complex; phase 3: rapid trio.
+      // Phase 1: alternation; phase 2: complex; phase 3: rapid
+      // trio. The rapid-trio interval was 0.25s — three reads in
+      // 0.75s from random directions, faster than human reaction
+      // can re-aim the shield. 0.45s gives time to actually read
+      // each bullet's origin.
       let interval;
       if (s.t < 2.5)      interval = 0.55;
       else if (s.t < 5.0) interval = 0.45;
-      else                interval = 0.25;
+      else                interval = 0.45;
       if (s.t >= 2.5 && s.pattern.length === 4) {
         s.pattern = [2, 2, 0, 2, 0, 0, 3, 1];
       }
@@ -3131,9 +3162,15 @@ Object.assign(ATTACKS, {
       const s = bossAI.state;
       bossSweep(dt, 0.2);
       s.relocateT += dt;
-      // Add second turret after the third relocation.
+      // Add second turret after the third relocation. The new
+      // turret's fireT is PHASED so it fires opposite of the first
+      // turret's cycle — alternating instead of simultaneous, so
+      // a single shield can actually snap between them.
       if (s.relocations >= 3 && s.turrets.length < 2) {
-        s.turrets.push({ edge: (s.turrets[0].edge + 2) % 4, fireT: 0 });
+        s.turrets.push({
+          edge: (s.turrets[0].edge + 2) % 4,
+          fireT: -0.275,             // half-cycle offset (cycle = 0.55s)
+        });
       }
       // Relocate.
       if (s.relocateT >= 2.5) {
@@ -3145,11 +3182,15 @@ Object.assign(ATTACKS, {
           t.edge = next;
         }
       }
+      // Fire rates: single turret 0.32s, double-turret each turret
+      // fires every 0.55s but they're phased a half-cycle apart, so
+      // alternating shots arrive ~0.275s apart from opposite edges.
+      // The player can shield one, snap to the other, shield, snap
+      // back — every shot is blockable.
+      const fireInterval = s.turrets.length > 1 ? 0.55 : 0.32;
       for (const t of s.turrets) {
         t.fireT += dt;
-        // Slower fire rate (was 0.20). The roulette challenge is
-        // the relocation surprise, not raw bullet density.
-        if (t.fireT >= 0.32) {
+        if (t.fireT >= fireInterval) {
           t.fireT = 0;
           _fireCardinal(t.edge, { speed: 200 });
         }
@@ -3192,22 +3233,16 @@ Object.assign(ATTACKS, {
         if (s.t >= 1.0) { s.phase = 'active'; s.t = 0; }
         return;
       }
-      // Stream from all four edges; heavy direction fires denser.
-      // Was 0.10s cadence with 40% odds on light directions — that
-      // produced ~24 bullets/sec across the four edges, far too
-      // dense to take three clears against. 0.18s + 25% odds keeps
-      // the heavy stream readable while the light ones serve as
-      // pressure that the player tanks.
+      // Single dense stream from the heavy direction. Light streams
+      // were dropped: the player only has one shield, so any light
+      // bullet from a non-shield direction was forced damage by
+      // design. Now the entire challenge is tracking the heavy
+      // direction (which rotates after each clear) and holding the
+      // shield matched to it long enough to charge the counter.
       s.spawnT += dt;
       if (s.spawnT >= 0.18) {
         s.spawnT = 0;
-        for (let d = 0; d < 4; d++) {
-          const heavy = (d === s.heavy);
-          const odds = heavy ? 1.0 : 0.25;
-          if (Math.random() < odds) {
-            _fireCardinal(d, { speed: 180 });
-          }
-        }
+        _fireCardinal(s.heavy, { speed: 180 });
       }
       // Detect blocked bullets via the count delta.
       // (Simpler: track bullets that are aimed at player and disappear
@@ -3242,14 +3277,14 @@ Object.assign(ATTACKS, {
         ctx.fillStyle = '#003300';
         ctx.fillRect(x, y, w, h);
         ctx.fillStyle = '#80ff90';
-        ctx.fillRect(x, y, w * Math.min(1, s.blockCounter / 20), h);
+        ctx.fillRect(x, y, w * Math.min(1, s.blockCounter / 10), h);
         ctx.strokeStyle = '#80ff90';
         ctx.lineWidth = 1;
         ctx.strokeRect(x + 0.5, y + 0.5, w, h);
         ctx.font = '10px "Courier New", monospace';
         ctx.fillStyle = '#ccffcc';
         ctx.textAlign = 'center';
-        ctx.fillText('BLOCK ' + s.blockCounter + '/20  CLEARS ' + s.clears + '/3',
+        ctx.fillText('BLOCK ' + s.blockCounter + '/10  CLEARS ' + s.clears + '/3',
                      CANVAS_W / 2, y - 2);
         ctx.restore();
       }
@@ -3421,7 +3456,7 @@ function _toxicFortressTick(s, dt) {
     if (approach === player.shieldDir) {
       enemyBullets.splice(i, 1);
       s.blockCounter++;
-      if (s.blockCounter >= 20) {
+      if (s.blockCounter >= 10) {
         s.blockCounter = 0;
         s.clears++;
         enemyBullets.length = 0;
@@ -4237,8 +4272,14 @@ function checkCollisions() {
     }
   }
 
-  // Enemy bullets vs player hitbox (square, with bullet radius)
-  if (!player.invincible && player.iframes <= 0 && !game.over) {
+  // Enemy bullets vs player hitbox (square, with bullet radius).
+  // Damage is capped at 1 per "hit event": once the player takes a
+  // hit and i-frames are set, any other bullet that connects this
+  // frame is still consumed (so it doesn't linger to hit again on
+  // the next frame) but does not deal additional damage. Without
+  // this, a multi-bullet attack like GEYSER's column could connect
+  // 3+ bullets in the same frame and one-shot a full-HP player.
+  if (!player.invincible && !game.over) {
     const half = PLAYER_HITBOX / 2;
     for (let i = enemyBullets.length - 1; i >= 0; i--) {
       const b = enemyBullets[i];
@@ -4270,12 +4311,18 @@ function checkCollisions() {
       }
 
       enemyBullets.splice(i, 1);
-      player.hp -= 1;
-      player.iframes = POST_HIT_IFRAMES;
-      if (player.hp <= 0) {
-        player.hp = 0;
-        killPlayer();
-        break;
+      // Only the first hit in any i-frame window actually does
+      // damage. Subsequent overlapping bullets the same frame still
+      // get consumed (so they don't linger and chain-hit) but they
+      // can't push HP further down.
+      if (player.iframes <= 0) {
+        player.hp -= 1;
+        player.iframes = POST_HIT_IFRAMES;
+        if (player.hp <= 0) {
+          player.hp = 0;
+          killPlayer();
+          break;
+        }
       }
     }
   }
