@@ -187,6 +187,10 @@ const PURPLE_JUMP_DURATION = 0.14; // sec per lane jump
 
 // GREEN — directional shield. Player is locked center; arrow keys
 // aim the shield, which only blocks bullets coming from that side.
+// Phase 3 multiplies each of the 3 visible health boxes by 5 — 15 HP
+// total. The HUD shows "x5"…"x1" on the active box as it depletes.
+const PHASE3_HP_PER_BOX = 5;
+
 const GREEN_SHIELD_R = 26;
 const GREEN_SHIELD_ARC = (2 * Math.PI) / 3; // 120° arc visual
 const GREEN_SHIELD_DIR_ANGLE = {
@@ -707,6 +711,7 @@ function resetGame() {
   player.y = ARENA.y + ARENA.h - 60;
   player.vx = 0; player.vy = 0;
   player.hp = 1;                    // always start at 1/3 — the fight is desperate
+  player.maxHp = 3;                 // Phase 3 will rescale this to 15 (3 boxes × x5)
   player.state = S_RED;
   player.invincible = false;
   player.iframes = 0;
@@ -3729,8 +3734,9 @@ function startPhase3() {
   boss.hp = boss.maxHp;
   boss.invincible = false;
   enemyBullets.length = 0;
-  // Restore the player to full HP for Phase 3. Phase 3 also drips
-  // 1 HP back every 5s during combat (handled in updatePhase3AI).
+  // Phase 3 multiplies the player's 3 health boxes by x5 → 15 HP
+  // total. The HUD renders as 3 boxes with a per-box "xN" countdown.
+  player.maxHp = PHASE3_HP_PER_BOX * 3;
   player.hp = player.maxHp;
   player.iframes = POST_HIT_IFRAMES;
 
@@ -4812,14 +4818,35 @@ function drawHUD() {
   ctx.font = '14px "Courier New", monospace';
   ctx.textAlign = 'left';
   ctx.fillText('HP', 20, CANVAS_H - 22);
-  for (let i = 0; i < player.maxHp; i++) {
-    const x = 50 + i * 18;
+  // Phase 3 uses the same 3 boxes but each one represents 5 HP and
+  // shows an "xN" countdown — players have 15 HP total, but the UI
+  // still reads as three squares.
+  const phase3Hp = (game.phase === 3 && player.maxHp > 3);
+  const boxes = phase3Hp ? 3 : player.maxHp;
+  const perBox = phase3Hp ? PHASE3_HP_PER_BOX : 1;
+  const boxW = phase3Hp ? 26 : 14;
+  const step = boxW + 4;
+  for (let i = 0; i < boxes; i++) {
+    const x = 50 + i * step;
     const y = CANVAS_H - 32;
-    ctx.fillStyle = i < player.hp ? '#ff3344' : '#552222';
-    ctx.fillRect(x, y, 14, 14);
+    const minHp = i * perBox;
+    const remaining = Math.max(0, Math.min(perBox, player.hp - minHp));
+    const alive = remaining > 0;
+    ctx.fillStyle = alive ? '#ff3344' : '#552222';
+    ctx.fillRect(x, y, boxW, 14);
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 1;
-    ctx.strokeRect(x + 0.5, y + 0.5, 14, 14);
+    ctx.strokeRect(x + 0.5, y + 0.5, boxW, 14);
+    if (phase3Hp && alive) {
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 11px "Courier New", monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('x' + remaining, x + boxW / 2, y + 7);
+      ctx.textBaseline = 'alphabetic';
+      ctx.textAlign = 'left';
+      ctx.font = '14px "Courier New", monospace';
+    }
   }
 
   // Boss HP bar (top)
