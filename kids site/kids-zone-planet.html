@@ -1014,7 +1014,7 @@ function spawnBullet(x, y, vx, vy, opts) {
     color: o.color || ENEMY_BULLET_COLOR,
   };
   // Optional lifespan in seconds — bullet despawns when it elapses.
-  // Used by trail attacks (FUME_TRAIL, CHAIN_REACTION) so static
+  // Used by trail attacks (FUME_TRAIL) so static
   // bullets don't accumulate indefinitely.
   if (o.life != null) b.life = o.life;
   if (o.harmless) b.harmless = true;
@@ -1636,7 +1636,7 @@ const SOUL_ORDER = ['red', 'blue', 'purple', 'green'];
 const PHASE2_POOLS = {
   red:    ['CONTAMINATION_ZONES', 'TOXIC_BUBBLES', 'PRESSURE_VALVE', 'FUME_TRAIL', 'STATIC_FIELD'],
   blue:   ['ACID_PUDDLES', 'RISING_SMOG', 'DOWNDRAFT', 'GEYSER', 'BOUNCE_PADS'],
-  purple: ['LINE_SWEEP', 'RAIL_SHUTDOWN', 'CONVERGING_RAILS', 'ALTERNATING_CURRENT', 'CHAIN_REACTION'],
+  purple: ['SLUDGE_CRAWLERS', 'WARNING_LANES', 'CONVEYOR_BELT', 'LEAPFROG', 'TOLL_BOOTH'],
   green:  ['CARDINAL_SHOTS', 'RING_OF_FIRE', 'PING_PONG', 'FEINT', 'MACHINE_GUN_ROULETTE'],
 };
 
@@ -2642,71 +2642,275 @@ Object.assign(ATTACKS, {
   //  PURPLE SOUL — rail-locked
   // ============================================================
 
-  // A solid vertical bar sweeps across the lanes; alternates side.
-  LINE_SWEEP: {
-    name: 'LINE SWEEP',
-    duration: 11.0,
+  // 1 — SLUDGE CRAWLERS: a chain of bullets crawls horizontally
+  // along ONE line at a time, with intentional gaps. The player
+  // reads the threatened line and either jumps off it, or threads
+  // through a gap if they want to stay. Late in the attack two
+  // crawlers run on different lines simultaneously, leaving two
+  // safe lines.
+  SLUDGE_CRAWLERS: {
+    name: 'SLUDGE CRAWLERS',
+    duration: 9.0,
     init() {
-      bossAI.state.phase = 'telegraph';
-      bossAI.state.t = 0;
-      bossAI.state.sweepIdx = 0;
-      bossAI.state.dir = 1;             // first sweep goes L → R
-      bossAI.state.barX = ARENA.x;
-      bossAI.state.spawnT = 0;
+      // Each crawler: { line, dir, startT, kSpawned }.
+      // dir = +1 left→right, -1 right→left. Bullets fire one per
+      // 0.30s, skipping indices 3 and 6 to leave two gaps.
+      bossAI.state.crawlers = [
+        { line: 0, dir:  1, startT: 0.5, kSpawned: 0 },
+        { line: 2, dir: -1, startT: 3.0, kSpawned: 0 },
+        // Dual crawlers — still two safe lines (1 and 3 stay open).
+        { line: 0, dir:  1, startT: 5.5, kSpawned: 0 },
+        { line: 2, dir: -1, startT: 5.5, kSpawned: 0 },
+      ];
     },
     update(dt) {
       const s = bossAI.state;
       bossSweep(dt, 0.3);
-      s.t += dt;
+      const SPACING = 0.30;
+      const COUNT = 9;
+      for (const c of s.crawlers) {
+        const elapsed = bossAI.attackT - c.startT;
+        if (elapsed < 0) continue;
+        const want = Math.min(COUNT, Math.floor(elapsed / SPACING) + 1);
+        while (c.kSpawned < want) {
+          const k = c.kSpawned;
+          c.kSpawned++;
+          if (k === 3 || k === 6) continue;          // gap slots
+          const x = (c.dir > 0) ? ARENA.x - 6 : ARENA.x + ARENA.w + 6;
+          spawnBullet(x, purpleLineY(c.line),
+                      c.dir * 110 * P2_SPEED, 0,
+                      { color: '#cc66ff' });
+        }
+      }
+    },
+  },
 
-      // 1.0s telegraph before each sweep — gives the player a beat
-      // to position at the opposite edge from where the bar will
-      // start, otherwise they can't possibly stay ahead.
+  // 2 — WARNING LANES: a line flashes red, then a tight wall of
+  // bullets sweeps across that one line. All other lines are safe
+  // for the duration of the wall. Pace tightens as the attack
+  // progresses; late in the attack two non-adjacent lines fire
+  // together (still leaving two safe lines).
+  WARNING_LANES: {
+    name: 'WARNING LANES',
+    duration: 11.0,
+    init() {
+      // Each event: lines hit, warn duration, attack-time it starts.
+      bossAI.state.events = [
+        { lines: [1],    warn: 1.5,  at: 0.4, dir:  1 },
+        { lines: [3],    warn: 1.5,  at: 2.7, dir: -1 },
+        { lines: [0],    warn: 1.0,  at: 5.0, dir:  1 },
+        { lines: [2],    warn: 1.0,  at: 6.7, dir: -1 },
+        { lines: [0, 2], warn: 0.85, at: 8.4, dir:  1 },
+      ].map(e => ({ ...e, started: false, fired: false, warnStartT: 0 }));
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.2);
+      for (const e of s.events) {
+        if (bossAI.attackT < e.at) continue;
+        if (!e.started) {
+          e.started = true;
+          e.warnStartT = bossAI.attackT;
+        }
+        if (!e.fired && bossAI.attackT - e.warnStartT >= e.warn) {
+          e.fired = true;
+          for (const line of e.lines) _fireWarningWall(line, e.dir);
+        }
+      }
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s || !s.events) return;
+      ctx.save();
+      for (const e of s.events) {
+        if (!e.started || e.fired) continue;
+        const tWarn = bossAI.attackT - e.warnStartT;
+        const a = 0.30 + 0.45 * Math.sin(tWarn * 22);
+        for (const line of e.lines) {
+          const ly = purpleLineY(line);
+          ctx.fillStyle = 'rgba(255, 60, 60, ' + a.toFixed(2) + ')';
+          ctx.fillRect(ARENA.x, ly - 8, ARENA.w, 16);
+        }
+      }
+      ctx.restore();
+    },
+  },
+
+  // 3 — CONVEYOR BELT: a slow stream sets up on Line 0; 3s later
+  // a second slow stream on Line 2. Lines 1 and 3 look safe — and
+  // are, until single fast bullets start firing down them, forcing
+  // the player to bounce between them.
+  CONVEYOR_BELT: {
+    name: 'CONVEYOR BELT',
+    duration: 12.0,
+    init() {
+      bossAI.state.beltT = 0;
+      bossAI.state.line2On = false;
+      bossAI.state.fastT = 0;
+      bossAI.state.fastIdx = 0;
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.2);
+      // Activate the second slow stream after a beat.
+      if (!s.line2On && bossAI.attackT >= 3.0) s.line2On = true;
+      // Slow conveyor streams — sparse so the line reads as
+      // 'partially passable, but heavily occupied'.
+      s.beltT += dt;
+      if (s.beltT >= 0.65) {
+        s.beltT = 0;
+        spawnBullet(ARENA.x - 6, purpleLineY(0),
+                    70 * P2_SPEED, 0, { color: '#aa66ff' });
+        if (s.line2On) {
+          spawnBullet(ARENA.x + ARENA.w + 6, purpleLineY(2),
+                      -70 * P2_SPEED, 0, { color: '#aa66ff' });
+        }
+      }
+      // Fast singles begin once the second belt is established.
+      if (bossAI.attackT >= 6.0) {
+        s.fastT += dt;
+        if (s.fastT >= 1.6) {
+          s.fastT = 0;
+          // Alternate between line 1 and line 3 — the two
+          // 'safe' lanes — forcing the player to swap.
+          const targetLine = (s.fastIdx % 2 === 0) ? 1 : 3;
+          const dir = (s.fastIdx % 2 === 0) ? 1 : -1;
+          const x = (dir > 0) ? ARENA.x - 6 : ARENA.x + ARENA.w + 6;
+          spawnBullet(x, purpleLineY(targetLine),
+                      dir * 230 * P2_SPEED, 0, { color: '#ff80cc' });
+          s.fastIdx++;
+        }
+      }
+    },
+  },
+
+  // 4 — LEAPFROG: a large bullet hops between lines at fixed x
+  // intervals. The player just stays off whichever line it's on.
+  // A second leapfrog goes the opposite direction; a third joins
+  // late. Leapfrogs aren't standard bullets — they collide via a
+  // custom check so the line-jump teleport reads correctly.
+  LEAPFROG: {
+    name: 'LEAPFROG',
+    duration: 11.0,
+    init() {
+      // (startLine, jumpDir, dir, startT). jumpDir −1 climbs up
+      // the lane stack, +1 climbs down.
+      bossAI.state.lfs = [
+        { startLine: 3, jumpDir: -1, dir:  1, startT: 0.0 },
+        { startLine: 0, jumpDir:  1, dir: -1, startT: 4.0 },
+        { startLine: 3, jumpDir: -1, dir:  1, startT: 7.5 },
+      ].map(lf => ({
+        ...lf,
+        line: lf.startLine,
+        x: (lf.dir > 0) ? ARENA.x - 14 : ARENA.x + ARENA.w + 14,
+        jumpsDone: 0,
+        nextJumpX: (lf.dir > 0)
+          ? ARENA.x + ARENA.w * 0.25
+          : ARENA.x + ARENA.w * 0.75,
+        active: false,
+      }));
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.2);
+      const SPEED = 110 * P2_SPEED;
+      const STEP = ARENA.w * 0.25;
+      for (const lf of s.lfs) {
+        if (bossAI.attackT < lf.startT) continue;
+        lf.active = true;
+        lf.x += lf.dir * SPEED * dt;
+        if (lf.jumpsDone < 3) {
+          const reached = (lf.dir > 0 && lf.x >= lf.nextJumpX) ||
+                          (lf.dir < 0 && lf.x <= lf.nextJumpX);
+          if (reached) {
+            lf.line = clamp(lf.line + lf.jumpDir, 0, PURPLE_LINES - 1);
+            lf.jumpsDone++;
+            lf.nextJumpX += lf.dir * STEP;
+          }
+        }
+        if ((lf.dir > 0 && lf.x > ARENA.x + ARENA.w + 30) ||
+            (lf.dir < 0 && lf.x <  ARENA.x - 30)) {
+          lf.active = false;
+        }
+      }
+      _leapfrogDamage(s.lfs);
+    },
+    draw() {
+      const s = bossAI.state;
+      if (!s || !s.lfs) return;
+      ctx.save();
+      for (const lf of s.lfs) {
+        if (!lf.active) continue;
+        const ly = purpleLineY(lf.line);
+        ctx.fillStyle = 'rgba(220, 140, 255, 0.40)';
+        ctx.beginPath();
+        ctx.arc(lf.x, ly, 18, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#cc66ff';
+        ctx.beginPath();
+        ctx.arc(lf.x, ly, 12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255, 220, 255, 0.85)';
+        ctx.beginPath();
+        ctx.arc(lf.x - 3, ly - 3, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    },
+  },
+
+  // 5 — TOLL BOOTH: a slow vertical column sweeps L → R across
+  // all four lines, with stationary obstacle clusters pre-placed
+  // on specific lines. The sweep is the time pressure (run right);
+  // the clusters are the routing puzzle (jump off to a clear line
+  // and back). Two sweeps with fresh cluster placements.
+  TOLL_BOOTH: {
+    name: 'TOLL BOOTH',
+    duration: 12.0,
+    init() {
+      bossAI.state.phase = 'telegraph';
+      bossAI.state.t = 0;
+      bossAI.state.sweepIdx = 0;
+      bossAI.state.barX = ARENA.x;
+      bossAI.state.spawnT = 0;
+      _placeTollClusters();
+    },
+    update(dt) {
+      const s = bossAI.state;
+      bossSweep(dt, 0.2);
+      s.t += dt;
       if (s.phase === 'telegraph') {
         if (s.t >= 1.0) {
           s.phase = 'sweeping';
           s.t = 0;
           s.spawnT = 0;
-          s.barX = (s.dir === 1) ? ARENA.x : ARENA.x + ARENA.w;
+          s.barX = ARENA.x;
         }
         return;
       }
-
-      // Slightly gentler escalation than before so the player can
-      // physically outrun the bar on every sweep — was 140/170/200
-      // (last sweep faster than player), now 140/160/180.
-      const speed = (140 + s.sweepIdx * 20) * P2_SPEED;
-      s.barX += s.dir * speed * dt;
-
-      // Lay down stationary bar bullets at the current x.
+      const speed = 130 * P2_SPEED;
+      s.barX += speed * dt;
       s.spawnT += dt;
-      if (s.spawnT >= 0.05) {
+      if (s.spawnT >= 0.06) {
         s.spawnT = 0;
         for (let i = 0; i < PURPLE_LINES; i++) {
-          spawnBullet(s.barX, purpleLineY(i), 0, 0, { color: '#c845ff' });
+          spawnBullet(s.barX, purpleLineY(i), 0, 0,
+                      { color: '#aa44ff' });
         }
       }
-
-      // Bar stops 70px short of the opposite edge — the unswept
-      // strip is the player's safe pocket. Without this, the bar
-      // covered the entire arena width and the player had nowhere
-      // to be when it reached the wall.
-      const stopMargin = 70;
-      const stopped = (s.dir === 1)
-        ? s.barX > ARENA.x + ARENA.w - stopMargin
-        : s.barX < ARENA.x + stopMargin;
-      if (stopped) {
+      if (s.barX > ARENA.x + ARENA.w - 70) {
         for (let j = enemyBullets.length - 1; j >= 0; j--) {
           const b = enemyBullets[j];
-          if (b.vx === 0 && b.vy === 0 && b.color === '#c845ff') {
+          if (b.vx === 0 && b.vy === 0
+              && (b.color === '#aa44ff' || b.color === '#9933ee')) {
             enemyBullets.splice(j, 1);
           }
         }
         s.sweepIdx++;
-        s.dir *= -1;
-        if (s.sweepIdx >= 3) {
-          bossAI.attackT = ATTACKS.LINE_SWEEP.duration;
+        if (s.sweepIdx >= 2) {
+          bossAI.attackT = ATTACKS.TOLL_BOOTH.duration;
         } else {
+          _placeTollClusters();
           s.phase = 'telegraph';
           s.t = 0;
         }
@@ -2717,224 +2921,17 @@ Object.assign(ATTACKS, {
       if (!s) return;
       ctx.save();
       if (s.phase === 'telegraph') {
-        // Pulsing warning bar at the start position of the upcoming
-        // sweep, plus a directional arrow so the player knows which
-        // way to flee.
-        const startX = (s.dir === 1) ? ARENA.x + 4 : ARENA.x + ARENA.w - 4;
+        const startX = ARENA.x + 4;
         const pulse = 0.45 + 0.35 * Math.sin(s.t * 16);
-        ctx.fillStyle = 'rgba(200, 80, 255, ' + (pulse * 0.55).toFixed(2) + ')';
+        ctx.fillStyle = 'rgba(170, 70, 240, ' + (pulse * 0.55).toFixed(2) + ')';
         ctx.fillRect(startX - 4, ARENA.y, 8, ARENA.h);
         ctx.font = 'bold 16px "Courier New", monospace';
         ctx.fillStyle = 'rgba(255, 220, 255, ' + pulse.toFixed(2) + ')';
         ctx.textAlign = 'center';
-        const arrow = s.dir === 1 ? '►' : '◄';
-        ctx.fillText(arrow, startX + s.dir * 18, ARENA.y + ARENA.h / 2 + 4);
+        ctx.fillText('►', startX + 18, ARENA.y + ARENA.h / 2 + 4);
       } else {
-        ctx.fillStyle = 'rgba(200, 80, 255, 0.5)';
+        ctx.fillStyle = 'rgba(170, 70, 240, 0.55)';
         ctx.fillRect(s.barX - 4, ARENA.y, 8, ARENA.h);
-      }
-      ctx.restore();
-    },
-  },
-
-  // One rail blocked at a time, rotating; horizontal traffic on the others.
-  RAIL_SHUTDOWN: {
-    name: 'RAIL SHUTDOWN',
-    duration: 8.0,
-    init() {
-      bossAI.state.deadLine = -1;
-      bossAI.state.deadT = 0;
-      bossAI.state.warnT = 0;
-      bossAI.state.warnLine = Math.floor(Math.random() * PURPLE_LINES);
-      bossAI.state.trafficT = 0;
-    },
-    update(dt) {
-      const s = bossAI.state;
-      bossSweep(dt, 0.3);
-      // Warning then shutdown.
-      s.warnT += dt;
-      if (s.warnT >= 1.0) {
-        s.warnT = 0;
-        // Clear the previously-dead line.
-        if (s.deadLine >= 0) {
-          const ly = purpleLineY(s.deadLine);
-          for (let j = enemyBullets.length - 1; j >= 0; j--) {
-            const b = enemyBullets[j];
-            if (b.vx === 0 && b.vy === 0 && Math.abs(b.y - ly) < 6) {
-              enemyBullets.splice(j, 1);
-            }
-          }
-        }
-        s.deadLine = s.warnLine;
-        // Fill it with stationary bullets.
-        const ly = purpleLineY(s.deadLine);
-        for (let x = ARENA.x + 6; x < ARENA.x + ARENA.w - 6; x += 14) {
-          spawnBullet(x, ly, 0, 0, { color: '#ff5577' });
-        }
-        // Pick the next warning line (different from current dead).
-        do {
-          s.warnLine = Math.floor(Math.random() * PURPLE_LINES);
-        } while (s.warnLine === s.deadLine);
-      }
-      // Horizontal traffic on active lines.
-      s.trafficT += dt;
-      if (s.trafficT >= 0.35) {
-        s.trafficT = 0;
-        for (let i = 0; i < PURPLE_LINES; i++) {
-          if (i === s.deadLine) continue;
-          const ly = purpleLineY(i);
-          const fromLeft = (i % 2 === 0);
-          spawnBullet(
-            fromLeft ? ARENA.x - 6 : ARENA.x + ARENA.w + 6,
-            ly,
-            (fromLeft ? 1 : -1) * 135 * P2_SPEED, 0
-          );
-        }
-      }
-    },
-    draw() {
-      const s = bossAI.state;
-      if (!s) return;
-      ctx.save();
-      // Warning flash on the line about to die.
-      if (s.warnLine !== s.deadLine) {
-        const a = 0.25 + 0.25 * Math.sin(s.warnT * 18);
-        ctx.fillStyle = 'rgba(255, 80, 80, ' + a.toFixed(2) + ')';
-        const ly = purpleLineY(s.warnLine);
-        ctx.fillRect(ARENA.x, ly - 6, ARENA.w, 12);
-      }
-      ctx.restore();
-    },
-  },
-
-  // L+R bullets converge on each line at staggered speeds. Each
-  // round only fires on TWO of the four lines (picked at random),
-  // so the player always has two clear safe lanes to jump to —
-  // hitting all four lines per round left no escape route.
-  CONVERGING_RAILS: {
-    name: 'CONVERGING RAILS',
-    duration: 7.5,
-    init() {
-      bossAI.state.round = -1;
-      bossAI.state.roundT = 999;
-    },
-    update(dt) {
-      const s = bossAI.state;
-      bossSweep(dt, 0.3);
-      s.roundT += dt;
-      if (s.round < 2 && s.roundT >= 2.5) {
-        s.round++;
-        s.roundT = 0;
-        // Shuffle line indices and take the first two.
-        const lanes = [0, 1, 2, 3];
-        for (let k = lanes.length - 1; k > 0; k--) {
-          const j = Math.floor(Math.random() * (k + 1));
-          [lanes[k], lanes[j]] = [lanes[j], lanes[k]];
-        }
-        const chosen = lanes.slice(0, 2);
-        for (const i of chosen) {
-          const ly = purpleLineY(i);
-          const sp = (100 + i * 22 + s.round * 30) * P2_SPEED;
-          spawnBullet(ARENA.x - 6, ly, sp, 0, { color: '#c845ff' });
-          spawnBullet(ARENA.x + ARENA.w + 6, ly, -sp, 0, { color: '#c845ff' });
-        }
-      }
-    },
-  },
-
-  // Streams on each line, alternating direction periodically.
-  ALTERNATING_CURRENT: {
-    name: 'ALTERNATING CURRENT',
-    duration: 8.0,
-    init() {
-      bossAI.state.flipT = 0;
-      bossAI.state.spawnT = 0;
-      bossAI.state.flipped = false;
-    },
-    update(dt) {
-      const s = bossAI.state;
-      bossSweep(dt, 0.3);
-      s.flipT += dt;
-      s.spawnT += dt;
-      if (s.flipT >= 2.0) {
-        s.flipT = 0;
-        s.flipped = !s.flipped;
-      }
-      // Wider spawn cadence + higher skip rate so each line has
-      // visible gaps to ride. Was 0.16s with 25% skip — bullets
-      // packed every ~28px on a line, no readable gap. Now 0.28s
-      // with 55% skip, so most spawn slots are empty and gaps are
-      // long enough for the player to occupy.
-      if (s.spawnT >= 0.28) {
-        s.spawnT = 0;
-        for (let i = 0; i < PURPLE_LINES; i++) {
-          const ly = purpleLineY(i);
-          let goesRight = (i % 2 === 0);
-          if (s.flipped) goesRight = !goesRight;
-          if (Math.random() < 0.55) continue;
-          spawnBullet(
-            goesRight ? ARENA.x - 6 : ARENA.x + ARENA.w + 6,
-            ly,
-            (goesRight ? 1 : -1) * 150 * P2_SPEED,
-            0,
-            { color: '#c845ff' }
-          );
-        }
-      }
-    },
-  },
-
-  // 1-3 bouncing bullets through the rails leaving stationary trails.
-  CHAIN_REACTION: {
-    name: 'CHAIN REACTION',
-    duration: 8.0,
-    init() {
-      bossAI.state.balls = [_makeChainBall(0)];
-      bossAI.state.spawn1 = false;
-      bossAI.state.spawn2 = false;
-      bossAI.state.dropT = 0;
-    },
-    update(dt) {
-      const s = bossAI.state;
-      bossSweep(dt, 0.3);
-      if (!s.spawn1 && bossAI.attackT >= 3.0) { s.balls.push(_makeChainBall(0)); s.spawn1 = true; }
-      if (!s.spawn2 && bossAI.attackT >= 6.0) { s.balls.push(_makeChainBall(0)); s.spawn2 = true; }
-      for (const ball of s.balls) {
-        const ly = purpleLineY(ball.line);
-        ball.x += ball.vx * dt;
-        ball.dropT += dt;
-        if (ball.dropT >= 0.18) {
-          ball.dropT = 0;
-          // Trail fades so the rails don't end up fully clogged by
-          // the time three balls are bouncing.
-          spawnBullet(ball.x, ly, 0, 0, { color: '#ffaaff', life: 4.0 });
-        }
-        if (ball.vx > 0 && ball.x > ARENA.x + ARENA.w) {
-          ball.line = (ball.line + 1) % PURPLE_LINES;
-          ball.vx = -Math.abs(ball.vx);
-          ball.x = ARENA.x + ARENA.w - 4;
-        }
-        if (ball.vx < 0 && ball.x < ARENA.x) {
-          ball.line = (ball.line + 1) % PURPLE_LINES;
-          ball.vx = Math.abs(ball.vx);
-          ball.x = ARENA.x + 4;
-        }
-      }
-    },
-    draw() {
-      const s = bossAI.state;
-      if (!s || !s.balls) return;
-      ctx.save();
-      for (const ball of s.balls) {
-        const ly = purpleLineY(ball.line);
-        ctx.fillStyle = '#ffccff';
-        ctx.beginPath();
-        ctx.arc(ball.x, ly, 7, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = 'rgba(255, 200, 255, 0.4)';
-        ctx.beginPath();
-        ctx.arc(ball.x, ly, 11, 0, Math.PI * 2);
-        ctx.fill();
       }
       ctx.restore();
     },
@@ -3379,13 +3376,60 @@ function _puddleDamage(puddles) {
   }
 }
 
-function _makeChainBall() {
-  return {
-    line: 0,
-    x: ARENA.x + 4,
-    vx: 180 * P2_SPEED,
-    dropT: 0,
-  };
+// WARNING_LANES — fire a tight wall of bullets along a single line
+// after its warning flash expires. The wall is 7 bullets packed
+// 8px apart in the direction of travel, so anyone on the line at
+// the wall's x will be hit. Fast (350 px/s) so the line reads as
+// 'the warning was real, do not stand there'.
+function _fireWarningWall(line, dir) {
+  const ly = purpleLineY(line);
+  const startX = (dir > 0) ? ARENA.x - 30 : ARENA.x + ARENA.w + 30;
+  const speed = dir * 350;
+  for (let k = 0; k < 7; k++) {
+    spawnBullet(startX - dir * k * 8, ly, speed, 0,
+                { color: '#cc66ff' });
+  }
+}
+
+// LEAPFROG damage check — leapfrogs aren't standard bullets (they
+// teleport between lines on jump triggers) so collisions are
+// resolved here. Same i-frame rules as the regular enemy-bullet
+// loop.
+function _leapfrogDamage(lfs) {
+  if (player.invincible || player.iframes > 0 || game.over) return;
+  const half = PLAYER_HITBOX / 2;
+  const R = 12;
+  for (const lf of lfs) {
+    if (!lf.active) continue;
+    const ly = purpleLineY(lf.line);
+    const cx = clamp(lf.x, player.x - half, player.x + half);
+    const cy = clamp(ly,   player.y - half, player.y + half);
+    const dx = lf.x - cx, dy = ly - cy;
+    if (dx * dx + dy * dy > R * R) continue;
+    player.hp -= 1;
+    player.iframes = POST_HIT_IFRAMES;
+    if (player.hp <= 0) { player.hp = 0; killPlayer(); }
+    return;
+  }
+}
+
+// TOLL_BOOTH — place 3 stationary obstacle clusters at random,
+// non-overlapping (line, x) positions. Clusters are 3 stationary
+// bullets close together so they read as a 'wall' on that line.
+function _placeTollClusters() {
+  const usedLines = new Set();
+  for (let i = 0; i < 3; i++) {
+    let line;
+    do {
+      line = Math.floor(Math.random() * PURPLE_LINES);
+    } while (usedLines.has(line));
+    usedLines.add(line);
+    const x = ARENA.x + 70 + Math.random() * (ARENA.w - 140);
+    const ly = purpleLineY(line);
+    for (let k = -1; k <= 1; k++) {
+      spawnBullet(x + k * 12, ly, 0, 0, { color: '#9933ee' });
+    }
+  }
 }
 
 // Fire a bullet from a cardinal edge inward toward the arena center.
@@ -3500,9 +3544,9 @@ const PHASE3_COMBOS = [
   { id: 'COMBO_2', soul: 'purple', a1: 'SMOG_SPIRAL',     a2: 'TRACK_SWITCH' },
   { id: 'COMBO_3', soul: 'green',  a1: 'EXHAUST_PIPES',   a2: 'MACHINE_GUN_ROULETTE' },
   { id: 'COMBO_4', soul: 'blue',   a1: 'PIPELINE_BURST',  a2: 'RISING_SMOG' },
-  { id: 'COMBO_5', soul: 'purple', a1: 'TOXIC_CLOUD',     a2: 'ALTERNATING_CURRENT' },
+  { id: 'COMBO_5', soul: 'purple', a1: 'TOXIC_CLOUD',     a2: 'CONVEYOR_BELT' },
   { id: 'COMBO_6', soul: 'green',  a1: 'CHEMICAL_RUNOFF', a2: 'RING_OF_FIRE' },
-  { id: 'COMBO_7', soul: 'purple', a1: 'SMOG_WALL',       a2: 'RAIL_SHUTDOWN' },
+  { id: 'COMBO_7', soul: 'purple', a1: 'SMOG_WALL',       a2: 'WARNING_LANES' },
   { id: 'COMBO_8', soul: 'red',    a1: 'AIMED_BARRAGE',   a2: 'CONTAMINATION_ZONES' },
 ];
 
@@ -3512,7 +3556,7 @@ const PHASE3_MODIFIERS = ['BOX_CRUSH', 'TEXT_BOX_ASSAULT', 'INVERSION', 'ERROR_F
 const FINAL_ATTACK_SEQUENCE = [
   { soul: 'red',    a1: 'CONTAMINATION_ZONES', a2: 'SMOG_SPIRAL' },
   { soul: 'blue',   a1: 'ACID_RAIN',           a2: 'GEYSER' },
-  { soul: 'purple', a1: 'LINE_SWEEP',          a2: 'ALTERNATING_CURRENT' },
+  { soul: 'purple', a1: 'TOLL_BOOTH',          a2: 'CONVEYOR_BELT' },
   { soul: 'green',  a1: 'CHEMICAL_RUNOFF',     a2: 'CARDINAL_SHOTS' },
 ];
 
