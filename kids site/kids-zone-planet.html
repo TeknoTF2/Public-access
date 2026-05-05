@@ -2776,7 +2776,7 @@ Object.assign(ATTACKS, {
           spawnBullet(
             fromLeft ? ARENA.x - 6 : ARENA.x + ARENA.w + 6,
             ly,
-            (fromLeft ? 1 : -1) * 150 * P2_SPEED, 0
+            (fromLeft ? 1 : -1) * 135 * P2_SPEED, 0
           );
         }
       }
@@ -2813,7 +2813,7 @@ Object.assign(ATTACKS, {
         s.roundT = 0;
         for (let i = 0; i < PURPLE_LINES; i++) {
           const ly = purpleLineY(i);
-          const sp = (110 + i * 25 + s.round * 35) * P2_SPEED;
+          const sp = (100 + i * 22 + s.round * 30) * P2_SPEED;
           spawnBullet(ARENA.x - 6, ly, sp, 0, { color: '#c845ff' });
           spawnBullet(ARENA.x + ARENA.w + 6, ly, -sp, 0, { color: '#c845ff' });
         }
@@ -2851,7 +2851,7 @@ Object.assign(ATTACKS, {
           spawnBullet(
             goesRight ? ARENA.x - 6 : ARENA.x + ARENA.w + 6,
             ly,
-            (goesRight ? 1 : -1) * 170 * P2_SPEED,
+            (goesRight ? 1 : -1) * 150 * P2_SPEED,
             0,
             { color: '#c845ff' }
           );
@@ -2942,7 +2942,7 @@ Object.assign(ATTACKS, {
         s.spawnT = 0;
         for (let i = 0; i < PURPLE_LINES; i++) {
           const ly = purpleLineY(i);
-          const sp = 150 * P2_SPEED;
+          const sp = 135 * P2_SPEED;
           if (Math.random() > 0.2) spawnBullet(ARENA.x - 6, ly, sp, 0, { color: '#cc66ff' });
           if (Math.random() > 0.2) spawnBullet(ARENA.x + ARENA.w + 6, ly, -sp, 0, { color: '#cc66ff' });
         }
@@ -3334,7 +3334,7 @@ function _makeChainBall() {
   return {
     line: 0,
     x: ARENA.x + 4,
-    vx: 200 * P2_SPEED,
+    vx: 180 * P2_SPEED,
     dropT: 0,
   };
 }
