@@ -2550,12 +2550,13 @@ Object.assign(ATTACKS, {
       // gaps the player can read and time their jumps against.
       if (s.streamT >= 0.45) {
         s.streamT = 0;
-        // Both streams drop into the player's jump arc — the lower
-        // one clips the floor, the higher one needs a slightly more
-        // committed jump. Previously these were at 62% / 38% of
-        // arena height, well above the player's jump apex.
-        const yLow  = ARENA.y + ARENA.h - 16;
-        const yHigh = ARENA.y + ARENA.h - 40;
+        // Two crossing streams with enough vertical spacing for the
+        // player hitbox + bullet radii to thread between them. Was
+        // 16 / 40 from the floor (24px gap, only 14px clear corridor
+        // — the 20px tall hitbox couldn't fit). Now 12 / 60 (48px
+        // gap, ~38px clear corridor).
+        const yLow  = ARENA.y + ARENA.h - 12;
+        const yHigh = ARENA.y + ARENA.h - 60;
         spawnBullet(ARENA.x - 6, yLow, 140 * P2_SPEED, 0, { color: '#80c0ff' });
         spawnBullet(ARENA.x + ARENA.w + 6, yHigh, -140 * P2_SPEED, 0, { color: '#80c0ff' });
       }
@@ -2675,10 +2676,15 @@ Object.assign(ATTACKS, {
         }
       }
 
-      // Bar exits the opposite edge — clear all leftover bar bullets
-      // and either telegraph the next sweep or end the attack.
-      if ((s.dir === 1 && s.barX > ARENA.x + ARENA.w + 4) ||
-          (s.dir === -1 && s.barX < ARENA.x - 4)) {
+      // Bar stops 70px short of the opposite edge — the unswept
+      // strip is the player's safe pocket. Without this, the bar
+      // covered the entire arena width and the player had nowhere
+      // to be when it reached the wall.
+      const stopMargin = 70;
+      const stopped = (s.dir === 1)
+        ? s.barX > ARENA.x + ARENA.w - stopMargin
+        : s.barX < ARENA.x + stopMargin;
+      if (stopped) {
         for (let j = enemyBullets.length - 1; j >= 0; j--) {
           const b = enemyBullets[j];
           if (b.vx === 0 && b.vy === 0 && b.color === '#c845ff') {
