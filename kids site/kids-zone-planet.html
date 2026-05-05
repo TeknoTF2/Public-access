@@ -2937,15 +2937,23 @@ Object.assign(ATTACKS, {
     },
   },
 
-  // SIGNATURE — Track Switch: lanes wave + converging streams.
+  // SIGNATURE — TRACK SWITCH: vertical signature. A stationary
+  // wall of bullets sits along the bottom of the arena (the floor
+  // line). Solid horizontal "tracks" are continuously generated
+  // at the top and flow downward toward that wall. Independent
+  // single bullets rain down between them. Player on the rails
+  // jumps UP between lines as each track passes through their
+  // current line — vertical pressure that's distinct from the
+  // other purple attacks.
   TRACK_SWITCH: {
     name: 'TRACK SWITCH',
-    duration: 8.0,
+    duration: 11.0,
     init() {
       bossAI.state.phase = 'telegraph';
       bossAI.state.t = 0;
-      bossAI.state.spawnT = 0;
-      bossAI.purpleWave = { t: 0, freq: 1.8, amp: 28 };
+      bossAI.state.trackT = 0.4;     // first track fires soon
+      bossAI.state.rainT = 0;
+      bossAI.state.floorPlaced = false;
     },
     update(dt) {
       const s = bossAI.state;
@@ -2955,18 +2963,38 @@ Object.assign(ATTACKS, {
         if (s.t >= 1.0) { s.phase = 'active'; s.t = 0; }
         return;
       }
-      bossAI.purpleWave.t += dt;
-      // Slowly grow the wave amplitude.
-      bossAI.purpleWave.amp = 16 + Math.min(s.t * 4, 26);
-      s.spawnT += dt;
-      if (s.spawnT >= 0.18) {
-        s.spawnT = 0;
-        for (let i = 0; i < PURPLE_LINES; i++) {
-          const ly = purpleLineY(i);
-          const sp = 135 * P2_SPEED;
-          if (Math.random() > 0.2) spawnBullet(ARENA.x - 6, ly, sp, 0, { color: '#cc66ff' });
-          if (Math.random() > 0.2) spawnBullet(ARENA.x + ARENA.w + 6, ly, -sp, 0, { color: '#cc66ff' });
+      // Lay the stationary bullet floor once, just below the
+      // bottom rail. The floor lasts the rest of the attack;
+      // endPhase2Attack clears it on transition.
+      if (!s.floorPlaced) {
+        s.floorPlaced = true;
+        const floorY = ARENA.y + ARENA.h - 14;
+        for (let x = ARENA.x + 6; x < ARENA.x + ARENA.w - 6; x += 14) {
+          spawnBullet(x, floorY, 0, 0, { color: '#9933ee' });
         }
+      }
+      // Descending tracks — solid horizontal rows of bullets that
+      // crawl downward and merge into the floor. Each track has
+      // one randomly-placed gap so a player who anticipates the
+      // descent can stand inside it instead of jumping.
+      s.trackT += dt;
+      if (s.trackT >= 1.6) {
+        s.trackT = 0;
+        const speed = 55 + Math.random() * 25;
+        const gapX = ARENA.x + 24 + Math.random() * (ARENA.w - 48);
+        const gapW = 50;
+        for (let x = ARENA.x + 6; x < ARENA.x + ARENA.w - 6; x += 18) {
+          if (x > gapX - gapW / 2 && x < gapX + gapW / 2) continue;
+          spawnBullet(x, ARENA.y - 8, 0, speed, { color: '#cc66ff' });
+        }
+      }
+      // Rain — single fast bullets from random x positions along
+      // the top edge, layered between the descending tracks.
+      s.rainT += dt;
+      if (s.rainT >= 0.28) {
+        s.rainT = 0;
+        const rx = ARENA.x + 10 + Math.random() * (ARENA.w - 20);
+        spawnBullet(rx, ARENA.y - 6, 0, 230, { color: '#ff80cc' });
       }
     },
     draw() {
