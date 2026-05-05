@@ -189,6 +189,12 @@ const PURPLE_JUMP_DURATION = 0.14; // sec per lane jump
 // aim the shield, which only blocks bullets coming from that side.
 const GREEN_SHIELD_R = 26;
 const GREEN_SHIELD_ARC = (2 * Math.PI) / 3; // 120° arc visual
+const GREEN_SHIELD_DIR_ANGLE = {
+  right:  0,
+  down:   Math.PI / 2,
+  left:   Math.PI,
+  up:    -Math.PI / 2,
+};
 
 // Bullets
 const PLAYER_FIRE_INTERVAL = 0.1; // sec
@@ -1390,15 +1396,35 @@ const ATTACKS = {
       s.waveT += dt;
       s.spawnT += dt;
 
-      if (s.spawnT >= 0.13 && s.waveT < 1.6) {
+      // In Phase 3 COMBO_6 (RING_OF_FIRE partner) the green shield
+      // can only face one direction, so we fire from ONE side per
+      // wave instead of both, and pause entirely while the partner
+      // attack is firing its cluster.
+      const inCombo6 = bossAI.phase3 && bossAI.phase3.comboIdx === 5;
+      const ringPaused = inCombo6 && bossAI.phase3.runoffPaused;
+
+      if (s.spawnT >= 0.13 && s.waveT < 1.6 && !ringPaused) {
         s.spawnT = 0;
         const speed = 150 * bossAI.bulletSpeedMul;
         // Irregular: occasionally skip to leave gaps.
-        if (Math.random() > 0.18) {
-          spawnBullet(ARENA.x - 6, s.leftY, speed, 0);
-        }
-        if (Math.random() > 0.18) {
-          spawnBullet(ARENA.x + ARENA.w + 6, s.rightY, -speed, 0);
+        if (inCombo6) {
+          // Alternate sides per wave so the player only has to hold
+          // one shield direction at a time.
+          const fromLeft = (s.waveIndex % 2 === 0);
+          if (Math.random() > 0.18) {
+            if (fromLeft) {
+              spawnBullet(ARENA.x - 6, s.leftY, speed, 0);
+            } else {
+              spawnBullet(ARENA.x + ARENA.w + 6, s.rightY, -speed, 0);
+            }
+          }
+        } else {
+          if (Math.random() > 0.18) {
+            spawnBullet(ARENA.x - 6, s.leftY, speed, 0);
+          }
+          if (Math.random() > 0.18) {
+            spawnBullet(ARENA.x + ARENA.w + 6, s.rightY, -speed, 0);
+          }
         }
       }
       if (s.waveT >= 2.2) {
@@ -3176,6 +3202,7 @@ Object.assign(ATTACKS, {
       bossAI.state.round = -1;
       bossAI.state.roundT = 999;
       bossAI.state.previewBullets = []; // visual ring during warning
+      bossAI.state.runoffPauseT = 0;
     },
     update(dt) {
       const s = bossAI.state;
@@ -3193,7 +3220,19 @@ Object.assign(ATTACKS, {
       }
       if (s.preparedT > 0) {
         s.preparedT -= dt;
-        if (s.preparedT <= 0) _fireRingOfFire(s.preparedDir);
+        if (s.preparedT <= 0) {
+          _fireRingOfFire(s.preparedDir);
+          // Keep the partner attack paused long enough for the
+          // cluster bullets to clear the player's shield window.
+          s.runoffPauseT = 0.8;
+        }
+      } else if (s.runoffPauseT > 0) {
+        s.runoffPauseT -= dt;
+      }
+      // In Phase 3 COMBO_6, signal CHEMICAL_RUNOFF to pause while
+      // we're preparing or just fired a cluster.
+      if (bossAI.phase3 && bossAI.phase3.comboIdx === 5) {
+        bossAI.phase3.runoffPaused = (s.preparedT > 0) || (s.runoffPauseT > 0);
       }
     },
     draw() {
@@ -3299,11 +3338,18 @@ Object.assign(ATTACKS, {
       const s = bossAI.state;
       bossSweep(dt, 0.2);
       s.relocateT += dt;
+      // In Phase 3 COMBO_3 (EXHAUST_PIPES partner) we lock turrets to
+      // the TOP edge so every bullet on screen approaches from above.
+      // EXHAUST_PIPES already streams bullets downward and the green
+      // shield can only face one direction; allowing turrets on
+      // left/right/bottom while pipes are firing was unwinnable.
+      const lockTop = bossAI.phase3 && bossAI.phase3.comboIdx === 2;
       // Add second turret after the third relocation. The new
       // turret's fireT is PHASED so it fires opposite of the first
       // turret's cycle — alternating instead of simultaneous, so
-      // a single shield can actually snap between them.
-      if (s.relocations >= 3 && s.turrets.length < 2) {
+      // a single shield can actually snap between them. Skipped
+      // entirely in COMBO_3 (both would sit on the same top anchor).
+      if (!lockTop && s.relocations >= 3 && s.turrets.length < 2) {
         s.turrets.push({
           edge: (s.turrets[0].edge + 2) % 4,
           fireT: -0.275,             // half-cycle offset (cycle = 0.55s)
@@ -3315,7 +3361,11 @@ Object.assign(ATTACKS, {
         s.relocations++;
         for (const t of s.turrets) {
           let next;
-          do { next = Math.floor(Math.random() * 4); } while (next === t.edge);
+          if (lockTop) {
+            next = 0;
+          } else {
+            do { next = Math.floor(Math.random() * 4); } while (next === t.edge);
+          }
           t.edge = next;
         }
       }
@@ -4368,6 +4418,30 @@ function updateBullets(dt) {
     }
     if (b.x < -20 || b.x > CANVAS_W + 20 || b.y < -20 || b.y > CANVAS_H + 20) {
       enemyBullets.splice(i, 1);
+    }
+  }
+
+  // GREEN shield: any enemy bullet that touches the shield arc is
+  // destroyed at the arc, not at the player's hitbox. This gives the
+  // player clear visual feedback that the shield is working — bullets
+  // pop on the shield instead of sliding through to the hitbox.
+  if (player.state === S_GREEN && !cutscene.active && !defeatSeq.active) {
+    const center = GREEN_SHIELD_DIR_ANGLE[player.shieldDir];
+    const half = GREEN_SHIELD_ARC / 2;
+    for (let i = enemyBullets.length - 1; i >= 0; i--) {
+      const b = enemyBullets[i];
+      if (b.harmless) continue;
+      const dx = b.x - player.x;
+      const dy = b.y - player.y;
+      const r = b.r || ENEMY_BULLET_R;
+      const reach = GREEN_SHIELD_R + r;
+      if (dx * dx + dy * dy > reach * reach) continue;
+      let da = Math.atan2(dy, dx) - center;
+      while (da >  Math.PI) da -= 2 * Math.PI;
+      while (da < -Math.PI) da += 2 * Math.PI;
+      if (Math.abs(da) <= half) {
+        enemyBullets.splice(i, 1);
+      }
     }
   }
 }
