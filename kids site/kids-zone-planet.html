@@ -3003,7 +3003,11 @@ Object.assign(ATTACKS, {
         }
         if (s.t >= 4.5) { s.phase = 'simultaneous'; s.fireT = 0; s.cycleI = 0; }
       } else {
-        if (s.fireT >= 0.9) {
+        // Wider gap between simultaneous pairs. Pairs fire 1.4s
+        // apart (was 0.9s) so the player's i-frames clear between
+        // pairs and they can re-aim the shield without being
+        // mid-hitstun.
+        if (s.fireT >= 1.4) {
           s.fireT = 0;
           // Pairs: vertical or horizontal.
           if (s.cycleI % 2 === 0) { _fireCardinal(0); _fireCardinal(2); }
@@ -3074,11 +3078,15 @@ Object.assign(ATTACKS, {
       bossSweep(dt, 0.2);
       s.t += dt;
       s.fireT += dt;
-      // Phase 1: alternation; phase 2: complex; phase 3: rapid trio.
+      // Phase 1: alternation; phase 2: complex; phase 3: rapid
+      // trio. The rapid-trio interval was 0.25s — three reads in
+      // 0.75s from random directions, faster than human reaction
+      // can re-aim the shield. 0.45s gives time to actually read
+      // each bullet's origin.
       let interval;
       if (s.t < 2.5)      interval = 0.55;
       else if (s.t < 5.0) interval = 0.45;
-      else                interval = 0.25;
+      else                interval = 0.45;
       if (s.t >= 2.5 && s.pattern.length === 4) {
         s.pattern = [2, 2, 0, 2, 0, 0, 3, 1];
       }
@@ -3155,11 +3163,15 @@ Object.assign(ATTACKS, {
           t.edge = next;
         }
       }
+      // When two turrets are firing simultaneously the player can
+      // only shield one direction, so the second turret's stream
+      // hits unblocked. Slow each turret's fire rate when there
+      // are two active so the player can absorb a hit and recover
+      // in the i-frame window before the next bullet.
+      const fireInterval = s.turrets.length > 1 ? 0.55 : 0.32;
       for (const t of s.turrets) {
         t.fireT += dt;
-        // Slower fire rate (was 0.20). The roulette challenge is
-        // the relocation surprise, not raw bullet density.
-        if (t.fireT >= 0.32) {
+        if (t.fireT >= fireInterval) {
           t.fireT = 0;
           _fireCardinal(t.edge, { speed: 200 });
         }
@@ -3203,17 +3215,16 @@ Object.assign(ATTACKS, {
         return;
       }
       // Stream from all four edges; heavy direction fires denser.
-      // Was 0.10s cadence with 40% odds on light directions — that
-      // produced ~24 bullets/sec across the four edges, far too
-      // dense to take three clears against. 0.18s + 25% odds keeps
-      // the heavy stream readable while the light ones serve as
-      // pressure that the player tanks.
+      // The light directions are SPARSE — the player can only shield
+      // the heavy direction, so the light streams' job is to apply
+      // mild pressure during charge, not to constantly grind HP off
+      // through the i-frame ceiling. Light odds 0.25 → 0.10.
       s.spawnT += dt;
       if (s.spawnT >= 0.18) {
         s.spawnT = 0;
         for (let d = 0; d < 4; d++) {
           const heavy = (d === s.heavy);
-          const odds = heavy ? 1.0 : 0.25;
+          const odds = heavy ? 1.0 : 0.10;
           if (Math.random() < odds) {
             _fireCardinal(d, { speed: 180 });
           }
@@ -3252,14 +3263,14 @@ Object.assign(ATTACKS, {
         ctx.fillStyle = '#003300';
         ctx.fillRect(x, y, w, h);
         ctx.fillStyle = '#80ff90';
-        ctx.fillRect(x, y, w * Math.min(1, s.blockCounter / 20), h);
+        ctx.fillRect(x, y, w * Math.min(1, s.blockCounter / 10), h);
         ctx.strokeStyle = '#80ff90';
         ctx.lineWidth = 1;
         ctx.strokeRect(x + 0.5, y + 0.5, w, h);
         ctx.font = '10px "Courier New", monospace';
         ctx.fillStyle = '#ccffcc';
         ctx.textAlign = 'center';
-        ctx.fillText('BLOCK ' + s.blockCounter + '/20  CLEARS ' + s.clears + '/3',
+        ctx.fillText('BLOCK ' + s.blockCounter + '/10  CLEARS ' + s.clears + '/3',
                      CANVAS_W / 2, y - 2);
         ctx.restore();
       }
@@ -3431,7 +3442,7 @@ function _toxicFortressTick(s, dt) {
     if (approach === player.shieldDir) {
       enemyBullets.splice(i, 1);
       s.blockCounter++;
-      if (s.blockCounter >= 20) {
+      if (s.blockCounter >= 10) {
         s.blockCounter = 0;
         s.clears++;
         enemyBullets.length = 0;
