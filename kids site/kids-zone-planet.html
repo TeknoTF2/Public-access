@@ -1411,6 +1411,13 @@ const ATTACKS = {
       if (s.spawnT >= 0.13 && s.waveT < 1.6 && !ringPaused) {
         s.spawnT = 0;
         const speed = 150 * bossAI.bulletSpeedMul;
+        // Spawn at the canvas edge — not the arena edge — so the
+        // bullet has visible travel time before it reaches the
+        // playable box. The previous arena-edge spawn could pop a
+        // bullet inside a player hugging the wall, since the only
+        // warning was the bullet itself.
+        const leftSpawnX  = -6;
+        const rightSpawnX = CANVAS_W + 6;
         // Irregular: occasionally skip to leave gaps.
         if (inCombo6) {
           // Alternate sides per wave so the player only has to hold
@@ -1418,17 +1425,17 @@ const ATTACKS = {
           const fromLeft = (s.waveIndex % 2 === 0);
           if (Math.random() > 0.18) {
             if (fromLeft) {
-              spawnBullet(ARENA.x - 6, s.leftY, speed, 0);
+              spawnBullet(leftSpawnX, s.leftY, speed, 0);
             } else {
-              spawnBullet(ARENA.x + ARENA.w + 6, s.rightY, -speed, 0);
+              spawnBullet(rightSpawnX, s.rightY, -speed, 0);
             }
           }
         } else {
           if (Math.random() > 0.18) {
-            spawnBullet(ARENA.x - 6, s.leftY, speed, 0);
+            spawnBullet(leftSpawnX, s.leftY, speed, 0);
           }
           if (Math.random() > 0.18) {
-            spawnBullet(ARENA.x + ARENA.w + 6, s.rightY, -speed, 0);
+            spawnBullet(rightSpawnX, s.rightY, -speed, 0);
           }
         }
       }
