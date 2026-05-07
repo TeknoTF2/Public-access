@@ -245,21 +245,35 @@ canvas {
 //   (px, py) is a float; player faces angle pAngle in radians
 //   (0 = +x east, PI/2 = +y south).
 //
+// Biomes:
+//   Each time the player exits a hallway they drop into a fresh
+//   region drawn from one of four biomes:
+//     - basement (yellow, dim, the original world)
+//     - pool     (teal walls, dark watery floor with shimmer)
+//     - garage   (concrete grey, strict pillar grid, low vis)
+//     - ballroom (warm amber/gold, sparse pillars, very open)
+//   Biomes share the same tile rules but tune passage/pillar
+//   openness and palette. The tile cache is cleared on biome
+//   change so newly generated tiles use the new biome's rules.
+//
 // Maze structure (deterministic, per-tile, lazy):
 //   - tile (x, y) where x even, y even  → corridor (always floor)
-//   - tile (x, y) where x odd,  y odd   → wall pillar (80%) or open
-//                                          floor (20%); openings
-//                                          fuse adjacent passages
-//                                          into wide liminal pockets.
-//   - tile (x, y) mixed odd/even        → passage candidate;
-//       80% open, 15% wall, 5% brown door.
-//       After the 10-min mark, *newly generated* walls have a
-//       25% chance to be a green door (the exit) instead.
+//   - tile (x, y) where x odd,  y odd   → wall pillar; biome's
+//                                          pillarOpen probability
+//                                          opens a fraction of them
+//                                          into the floor grid.
+//   - tile (x, y) mixed odd/even        → passage candidate; biome
+//                                          passageOpen probability
+//                                          decides open vs wall;
+//                                          25% of walls become brown
+//                                          doors. After the 10-min
+//                                          mark, *newly generated*
+//                                          walls have a 25% chance
+//                                          to be a green door (exit).
 //
-//   Each tile is generated once on first read and cached, so
-//   tiles already explored before the 10-min mark stay as they
-//   were — only NEW walls (newly generated after 10 min) get
-//   the green-door roll.
+//   Each tile is generated once on first read and cached. The
+//   cache is keyed by (x, y, biome) so tiles re-roll when biomes
+//   change.
 //
 //   Spawn safety: when the player drops into a fresh corridor
 //   (game start, hallway exit) the four neighbouring passages
@@ -267,9 +281,14 @@ canvas {
 //   to roll as walls — guarantees a way forward from spawn.
 //
 // Hallways are a separate, transient world: a 1-tile-wide
-// straight corridor of length 15-30. Music pauses on entry and
-// resumes on exit. On exit the player is dropped into a fresh
-// area of the maze a short distance from where they entered.
+// straight corridor. On entry one of three variants is rolled:
+//     - normal    (50%): yellow, length 15-30
+//     - red       (25%): deep red/maroon, length 30-60
+//     - stairwell (25%): yellow, horizon line drops as the
+//                        player advances — fakes descending
+//                        without any vertical geometry.
+// Music pauses on entry and resumes on exit. On exit the player
+// is dropped into a freshly seeded biome.
 // ============================================================
 
 // ---------- Constants ----------
@@ -277,7 +296,6 @@ const CANVAS_W = 640;
 const CANVAS_H = 400;
 const NUM_RAYS = 200;
 const FOV = Math.PI / 3; // 60°
-const RENDER_DIST_MAZE = 14;
 // Slightly extended hallway visibility so the periodic side alcoves
 // resolve before the player walks into them — keeps the eerie close
 // fog while letting the player perceive forward motion.
@@ -293,18 +311,77 @@ const TURN_ANIM_MS = 170;
 
 const HALLWAY_LEN_MIN = 15;
 const HALLWAY_LEN_MAX = 30;
+// Red hallway is double the length, exaggerating the dread.
+const RED_HALLWAY_LEN_MIN = 30;
+const RED_HALLWAY_LEN_MAX = 60;
 
 const GREEN_DOOR_AFTER_MS = 10 * 60 * 1000; // 10 minutes (hidden)
 const GREEN_DOOR_CHANCE   = 0.25;
-const BROWN_DOOR_CHANCE   = 0.05;
-// Passage open chance — bumped from 0.60 to 0.80 so the maze reads
-// as a column hall rather than a grid of corridors. Walls become
-// rare punctuation; sealed corridors are now ~0.04% probability.
-const PASSAGE_OPEN_CHANCE = 0.80;
-// Pillar (odd, odd) cells are normally always wall. Open a fraction
-// of them so the floor occasionally extends into the column grid,
-// producing wide liminal pockets between rows of pillars.
-const PILLAR_OPEN_CHANCE  = 0.20;
+// Probability that a passage cell is a brown door. Rolled before
+// the floor/wall decision so sparse biomes (ballroom, pool) still
+// have navigable doors. Matches the original ~5% door density.
+const BROWN_DOOR_PER_PASSAGE = 0.05;
+
+// ---------- Biomes ----------
+// Each biome picks a palette and tunes openness. Same maze rules
+// apply, just with different probabilities and colors. shimmer:true
+// triggers an animated water effect on the floor.
+const BIOME_BASEMENT = 'basement';
+const BIOME_POOL     = 'pool';
+const BIOME_GARAGE   = 'garage';
+const BIOME_BALLROOM = 'ballroom';
+const BIOMES = [BIOME_BASEMENT, BIOME_POOL, BIOME_GARAGE, BIOME_BALLROOM];
+
+const BIOME_CONFIG = {
+  basement: {
+    wall:        [240, 200, 40],   // bright yellow
+    ceiling:     [58, 40, 32],     // dim brown
+    floor:       [90, 72, 56],     // beige carpet
+    renderDist:  14,
+    fadeStart:   6,
+    passageOpen: 0.80,
+    pillarOpen:  0.20,
+  },
+  pool: {
+    wall:        [60, 200, 210],   // teal/cyan
+    ceiling:     [12, 60, 70],
+    floor:       [10, 40, 60],     // dark, watery
+    renderDist:  18,
+    fadeStart:   10,
+    passageOpen: 0.92,
+    pillarOpen:  0.55,
+    shimmer:     true,
+  },
+  garage: {
+    wall:        [135, 135, 138],  // concrete grey
+    ceiling:     [22, 22, 22],
+    floor:       [40, 40, 40],
+    renderDist:  7,                // claustrophobic in spite of openness
+    fadeStart:   1.5,
+    passageOpen: 0.96,             // wide-open floor between columns
+    pillarOpen:  0.04,             // strict pillar grid
+  },
+  ballroom: {
+    wall:        [220, 170, 70],   // warm amber/gold
+    ceiling:     [60, 36, 16],
+    floor:       [86, 56, 28],
+    renderDist:  20,
+    fadeStart:   12,
+    passageOpen: 0.97,             // sea of floor
+    pillarOpen:  0.88,             // sparse pillars only
+  },
+};
+
+// ---------- Hallway types ----------
+const HALL_NORMAL    = 'normal';
+const HALL_RED       = 'red';
+const HALL_STAIRWELL = 'stairwell';
+const RED_HALLWAY_CHANCE   = 0.25;
+const STAIR_HALLWAY_CHANCE = 0.25;
+// How far (in pixels) the horizon line drops by the end of a
+// stairwell walk. Sells the illusion of descending without any
+// real vertical geometry; snaps back on hallway exit.
+const STAIRWELL_HORIZON_DROP = 70;
 
 // ---------- DOM ----------
 const splash    = document.getElementById('splash');
@@ -318,6 +395,7 @@ const bgm       = document.getElementById('bgm');
 // ---------- State ----------
 const state = {
   mode: 'maze',           // 'maze' | 'hallway' | 'won'
+  biome: BIOME_BASEMENT,  // current maze biome
   px: 0.5, py: 0.5,
   pAngle: 0,
   // Animation
@@ -326,10 +404,10 @@ const state = {
   animStart: 0, animDur: 0, animType: null, // 'move' | 'turn' | null
   // Hallway
   hallwayLen: 0,
-  hallwayReturnHint: { x: 0, y: 0 },
+  hallwayType: HALL_NORMAL,
   // Hidden timer
   gameStart: 0,
-  // Tile cache (sparse, keyed by "x,y")
+  // Tile cache (sparse, keyed by "x,y"; cleared on biome change)
   tileCache: new Map(),
   // Hallway tile cache (cleared on each new hallway)
   hallwayTiles: null,
@@ -369,30 +447,27 @@ function getTile(x, y) {
 }
 
 function generateTile(x, y) {
+  const cfg = BIOME_CONFIG[state.biome];
   // Corridor cells: always floor.
   if ((x & 1) === 0 && (y & 1) === 0) return TILE_FLOOR;
-  // Pillar cells: usually wall, occasionally open. An open pillar
-  // bridges adjacent passages into wider open zones, giving the
-  // maze a "column hall" feel instead of a strict grid.
+  // Pillar cells: usually wall, occasionally open per biome.
   if ((x & 1) === 1 && (y & 1) === 1) {
     const rngP = rngFor(tileSeed(x, y) ^ 0x70696c6c);
-    if (rngP() < PILLAR_OPEN_CHANCE) return TILE_FLOOR;
+    if (rngP() < cfg.pillarOpen) return TILE_FLOOR;
     return TILE_WALL;
   }
 
   // Passage cell — between two corridor cells.
   const rng = rngFor(tileSeed(x, y));
-  const r1 = rng();
-  if (r1 < PASSAGE_OPEN_CHANCE) return TILE_FLOOR;
-
-  // Wall. Maybe a door.
-  const r2 = rng();
-  if (r2 < BROWN_DOOR_CHANCE / (1 - PASSAGE_OPEN_CHANCE)) return TILE_DOOR_BROWN;
+  // Brown door first, biome-independent — keeps doors findable in
+  // sparse biomes like ballroom where almost everything is floor.
+  if (rng() < BROWN_DOOR_PER_PASSAGE) return TILE_DOOR_BROWN;
+  // Otherwise, biome openness decides floor vs wall.
+  if (rng() < cfg.passageOpen) return TILE_FLOOR;
 
   // After the 10-min mark, NEW walls get a chance to be a green door (exit).
   if (Date.now() - state.gameStart >= GREEN_DOOR_AFTER_MS) {
-    const r3 = rng();
-    if (r3 < GREEN_DOOR_CHANCE) return TILE_DOOR_GREEN;
+    if (rng() < GREEN_DOOR_CHANCE) return TILE_DOOR_GREEN;
   }
 
   return TILE_WALL;
@@ -511,29 +586,63 @@ function castRay(angle, maxDist) {
 
 // ---------- Render ----------
 function colorForTile(tile) {
-  switch (tile) {
-    case TILE_DOOR_BROWN: return [107, 68, 35];
-    case TILE_DOOR_GREEN: return [40, 200, 80];
-    default:              return [240, 200, 40]; // bright yellow walls
+  if (tile === TILE_DOOR_BROWN) return [107, 68, 35];
+  if (tile === TILE_DOOR_GREEN) return [40, 200, 80];
+  if (state.mode === 'hallway') {
+    // Red corridor uses a deep maroon; normal/stairwell stay yellow.
+    if (state.hallwayType === HALL_RED) return [170, 35, 38];
+    return [240, 200, 40];
   }
+  return BIOME_CONFIG[state.biome].wall;
 }
 
 function render() {
-  // Sky / floor
+  const now = performance.now();
+  const cfg = state.mode === 'maze' ? BIOME_CONFIG[state.biome] : null;
+
+  // Stairwell drops the horizon as the player walks deeper. We use
+  // the player's x progress through the hallway as the curve so the
+  // shift moves smoothly with motion (including mid-step animation).
+  let centerY = CANVAS_H / 2;
+  if (state.mode === 'hallway' && state.hallwayType === HALL_STAIRWELL) {
+    const progress = Math.max(0, Math.min(1, state.px / state.hallwayLen));
+    centerY = CANVAS_H / 2 + STAIRWELL_HORIZON_DROP * progress;
+  }
+
+  // Ceiling / floor fill
   if (state.mode === 'hallway') {
     ctx.fillStyle = '#0a0a08';
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
   } else {
-    // Ceiling — dim brown
-    ctx.fillStyle = '#3a2820';
-    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H / 2);
-    // Floor — beige carpet
-    ctx.fillStyle = '#5a4838';
-    ctx.fillRect(0, CANVAS_H / 2, CANVAS_W, CANVAS_H / 2);
+    const [cr, cg, cb] = cfg.ceiling;
+    ctx.fillStyle = 'rgb(' + cr + ',' + cg + ',' + cb + ')';
+    ctx.fillRect(0, 0, CANVAS_W, centerY);
+
+    if (cfg.shimmer) {
+      // Pool floor: horizontal stripes whose brightness oscillates
+      // on a sliding sine wave — fakes water shimmer without any
+      // real reflection math.
+      const [fr, fg, fb] = cfg.floor;
+      const t = now * 0.0022;
+      const stripeH = 4;
+      for (let y = centerY; y < CANVAS_H; y += stripeH) {
+        const phase = (y - centerY) * 0.06 + t;
+        const k = 0.82 + 0.28 * Math.sin(phase);
+        const r = Math.min(255, fr * k) | 0;
+        const g = Math.min(255, fg * k) | 0;
+        const b = Math.min(255, fb * k) | 0;
+        ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+        ctx.fillRect(0, y, CANVAS_W, stripeH);
+      }
+    } else {
+      const [fr, fg, fb] = cfg.floor;
+      ctx.fillStyle = 'rgb(' + fr + ',' + fg + ',' + fb + ')';
+      ctx.fillRect(0, centerY, CANVAS_W, CANVAS_H - centerY);
+    }
   }
 
-  const maxDist = state.mode === 'hallway' ? RENDER_DIST_HALLWAY : RENDER_DIST_MAZE;
-  const fadeStart = state.mode === 'hallway' ? 0.4 : 6;
+  const maxDist   = state.mode === 'hallway' ? RENDER_DIST_HALLWAY : cfg.renderDist;
+  const fadeStart = state.mode === 'hallway' ? 0.4                 : cfg.fadeStart;
   const colW = CANVAS_W / NUM_RAYS;
 
   for (let i = 0; i < NUM_RAYS; i++) {
@@ -547,7 +656,7 @@ function render() {
     if (corrected <= 0.01) continue;
 
     const wallH = Math.min(CANVAS_H, CANVAS_H / corrected);
-    const wallTop = (CANVAS_H - wallH) / 2;
+    const wallTop = centerY - wallH / 2;
 
     let [r, g, b] = colorForTile(hit.tile);
 
@@ -560,7 +669,7 @@ function render() {
       lit = Math.max(0, 1 - corrected / RENDER_DIST_HALLWAY);
       lit = Math.pow(lit, 1.4);
     } else if (corrected > fadeStart) {
-      lit = Math.max(0.35, 1 - (corrected - fadeStart) / (RENDER_DIST_MAZE - fadeStart) * 0.65);
+      lit = Math.max(0.35, 1 - (corrected - fadeStart) / (maxDist - fadeStart) * 0.65);
     }
     r = (r * lit) | 0;
     g = (g * lit) | 0;
@@ -573,8 +682,8 @@ function render() {
   // Hallway vignette (extra darkness around edges)
   if (state.mode === 'hallway') {
     const grad = ctx.createRadialGradient(
-      CANVAS_W / 2, CANVAS_H / 2, 60,
-      CANVAS_W / 2, CANVAS_H / 2, CANVAS_W * 0.6,
+      CANVAS_W / 2, centerY, 60,
+      CANVAS_W / 2, centerY, CANVAS_W * 0.6,
     );
     grad.addColorStop(0, 'rgba(0,0,0,0)');
     grad.addColorStop(1, 'rgba(0,0,0,0.85)');
@@ -679,7 +788,7 @@ function tryStep(forward) {
 
   // Door interactions only when walking forward.
   if (forward) {
-    if (t === TILE_DOOR_BROWN) { enterHallway(cellX, cellY); return; }
+    if (t === TILE_DOOR_BROWN) { enterHallway(); return; }
     if (t === TILE_DOOR_GREEN) { winGame(); return; }
   }
 
@@ -699,11 +808,22 @@ function tryTurn(left) {
 }
 
 // ---------- Hallway transitions ----------
-function enterHallway(returnX, returnY) {
-  state.hallwayReturnHint.x = returnX;
-  state.hallwayReturnHint.y = returnY;
-  state.hallwayLen = HALLWAY_LEN_MIN
-                  + Math.floor(Math.random() * (HALLWAY_LEN_MAX - HALLWAY_LEN_MIN + 1));
+function pickHallwayType() {
+  const r = Math.random();
+  if (r < RED_HALLWAY_CHANCE) return HALL_RED;
+  if (r < RED_HALLWAY_CHANCE + STAIR_HALLWAY_CHANCE) return HALL_STAIRWELL;
+  return HALL_NORMAL;
+}
+
+function enterHallway() {
+  state.hallwayType = pickHallwayType();
+  if (state.hallwayType === HALL_RED) {
+    state.hallwayLen = RED_HALLWAY_LEN_MIN
+                    + Math.floor(Math.random() * (RED_HALLWAY_LEN_MAX - RED_HALLWAY_LEN_MIN + 1));
+  } else {
+    state.hallwayLen = HALLWAY_LEN_MIN
+                    + Math.floor(Math.random() * (HALLWAY_LEN_MAX - HALLWAY_LEN_MIN + 1));
+  }
   state.mode = 'hallway';
   state.px = 0.5;
   state.py = 0.5;
@@ -718,27 +838,22 @@ function enterHallway(returnX, returnY) {
 }
 
 function exitHallway() {
-  // Drop the player into a fresh area of the maze: a few corridor
-  // cells away from where they entered, in a random cardinal
-  // direction. This procedurally extends exploration.
-  const dirs = [[0, -1], [1, 0], [0, 1], [-1, 0]];
-  const [dx, dy] = dirs[Math.floor(Math.random() * 4)];
-  const dist = 4 + Math.floor(Math.random() * 5); // 4-8 corridor cells away
-  let nx = state.hallwayReturnHint.x + dx * dist * 2;
-  let ny = state.hallwayReturnHint.y + dy * dist * 2;
-  // Snap to corridor cells (even, even)
-  nx -= (nx & 1);
-  ny -= (ny & 1);
+  // Drop the player into a freshly seeded biome. We pick a biome
+  // at random (any of the four, including basement), clear the
+  // tile cache so generation uses the new biome's rules, and
+  // respawn at the origin. This makes each hallway transition a
+  // doorway into a new region rather than continuous exploration.
+  state.biome = BIOMES[Math.floor(Math.random() * BIOMES.length)];
+  state.tileCache.clear();
 
   state.mode = 'maze';
-  // Guarantee a way forward from the spawn corridor — never drop
-  // the player into a sealed 1×1 box.
-  ensureCorridorEscape(nx, ny);
-  state.px = nx + 0.5;
-  state.py = ny + 0.5;
+  state.px = 0.5;
+  state.py = 0.5;
+  ensureCorridorEscape(0, 0);
   // Face a random cardinal direction
   state.pAngle = (Math.floor(Math.random() * 4)) * (Math.PI / 2);
   state.animType = null;
+  state.hallwayType = HALL_NORMAL;
 
   // Resume music from where it left off — pause() preserved the
   // playback position, so play() picks up there. No currentTime
@@ -778,7 +893,8 @@ function startGame() {
   splash.style.display = 'none';
   gameArea.classList.add('visible');
   state.gameStart = Date.now();
-  // Player starts at corridor cell (0,0).
+  // Player starts in the basement biome at corridor cell (0,0).
+  state.biome = BIOME_BASEMENT;
   state.px = 0.5;
   state.py = 0.5;
   state.pAngle = 0;
