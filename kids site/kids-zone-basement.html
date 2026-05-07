@@ -922,6 +922,12 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     state.keys.add(e.key);
   }
+  // Dev shortcut: P fast-forwards the hidden green-door timer by
+  // 1 minute. Mutates gameStart backward so generateTile sees more
+  // elapsed time and starts rolling green doors sooner.
+  if (e.key === 'p' || e.key === 'P') {
+    state.gameStart -= 60 * 1000;
+  }
 });
 window.addEventListener('keyup', (e) => {
   if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
