@@ -354,12 +354,13 @@ const BIOME_CONFIG = {
   },
   garage: {
     wall:        [135, 135, 138],  // concrete grey
-    ceiling:     [22, 22, 22],
-    floor:       [40, 40, 40],
-    renderDist:  7,                // claustrophobic in spite of openness
-    fadeStart:   1.5,
+    ceiling:     [10, 10, 10],
+    floor:       [22, 22, 22],
+    renderDist:  6,                // claustrophobic dark
+    fadeStart:   0.6,
     passageOpen: 0.96,             // wide-open floor between columns
     pillarOpen:  0.04,             // strict pillar grid
+    dark:        true,             // hallway-style fade-to-black + vignette
   },
   ballroom: {
     wall:        [220, 170, 70],   // warm amber/gold
@@ -665,8 +666,10 @@ function render() {
 
     // Distance shading
     let lit = 1;
-    if (state.mode === 'hallway') {
-      lit = Math.max(0, 1 - corrected / RENDER_DIST_HALLWAY);
+    if (state.mode === 'hallway' || (cfg && cfg.dark)) {
+      // Hallway-style fade-to-black so distant walls disappear
+      // into darkness rather than fading to a flat 35% floor.
+      lit = Math.max(0, 1 - corrected / maxDist);
       lit = Math.pow(lit, 1.4);
     } else if (corrected > fadeStart) {
       lit = Math.max(0.35, 1 - (corrected - fadeStart) / (maxDist - fadeStart) * 0.65);
@@ -679,8 +682,8 @@ function render() {
     ctx.fillRect(i * colW, wallTop, Math.ceil(colW) + 1, wallH);
   }
 
-  // Hallway vignette (extra darkness around edges)
-  if (state.mode === 'hallway') {
+  // Vignette (hallways and dark biomes — sells the closed-in darkness)
+  if (state.mode === 'hallway' || (cfg && cfg.dark)) {
     const grad = ctx.createRadialGradient(
       CANVAS_W / 2, centerY, 60,
       CANVAS_W / 2, centerY, CANVAS_W * 0.6,
