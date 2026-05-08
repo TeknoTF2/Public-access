@@ -612,7 +612,25 @@ function colorForTile(tile) {
 
 function render() {
   const now = performance.now();
-  const cfg = state.mode === 'maze' ? BIOME_CONFIG[state.biome] : null;
+  let cfg = state.mode === 'maze' ? BIOME_CONFIG[state.biome] : null;
+  if (cfg && state.musicSilenced) {
+    // Lights out — once the horror grace timer expires, every
+    // biome inherits a dark profile. We keep the biome's wall
+    // hue (so the player can still tell where they are) but kill
+    // ceiling/floor brightness, kill shimmer, force the
+    // hallway-style fade-to-black + vignette, and clamp render
+    // distance so visibility drops immediately.
+    cfg = {
+      wall:        cfg.wall,
+      ceiling:     [6, 6, 6],
+      floor:       [14, 14, 14],
+      renderDist:  Math.min(cfg.renderDist, 6),
+      fadeStart:   Math.min(cfg.fadeStart, 0.6),
+      passageOpen: cfg.passageOpen,
+      pillarOpen:  cfg.pillarOpen,
+      dark:        true,
+    };
+  }
 
   // Stairwell drops the horizon as the player walks deeper. We use
   // the player's x progress through the hallway as the curve so the
