@@ -322,6 +322,15 @@ const GREEN_DOOR_CHANCE   = 0.25;
 // have navigable doors. Matches the original ~5% door density.
 const BROWN_DOOR_PER_PASSAGE = 0.05;
 
+// ---------- Horror element ----------
+// At 2 minutes-or-less remaining on the green-door timer (i.e. 8
+// minutes into the run) a warning fires and a 30-second grace
+// timer counts down on screen. When it hits zero the music
+// permanently stops for the rest of the playthrough — the only
+// mechanical consequence. Everything else is atmospheric.
+const HORROR_WARNING_BEFORE_MS = 2 * 60 * 1000;
+const HORROR_GRACE_MS = 30 * 1000;
+
 // ---------- Biomes ----------
 // Each biome picks a palette and tunes openness. Same maze rules
 // apply, just with different probabilities and colors. shimmer:true
@@ -408,6 +417,10 @@ const state = {
   hallwayType: HALL_NORMAL,
   // Hidden timer
   gameStart: 0,
+  // Horror warning state
+  warningTriggered: false,
+  warningStart: 0,
+  musicSilenced: false,
   // Tile cache (sparse, keyed by "x,y"; cleared on biome change)
   tileCache: new Map(),
   // Hallway tile cache (cleared on each new hallway)
@@ -693,6 +706,61 @@ function render() {
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
   }
+
+  drawHorrorOverlay();
+}
+
+// ---------- Horror overlay ----------
+// Fires once the run passes the (10 - 2) minute mark; runs for 30
+// seconds; on expiry, music is paused permanently. The overlay
+// itself only renders during the grace window — once silenced,
+// nothing else changes visually.
+function tickHorror() {
+  if (state.mode === 'won') return;
+  const elapsed = Date.now() - state.gameStart;
+  if (!state.warningTriggered &&
+      elapsed >= GREEN_DOOR_AFTER_MS - HORROR_WARNING_BEFORE_MS) {
+    state.warningTriggered = true;
+    state.warningStart = Date.now();
+  }
+  if (state.warningTriggered && !state.musicSilenced) {
+    if (Date.now() - state.warningStart >= HORROR_GRACE_MS) {
+      state.musicSilenced = true;
+      try { bgm.pause(); } catch (e) {}
+    }
+  }
+}
+
+function drawHorrorOverlay() {
+  if (!state.warningTriggered || state.musicSilenced) return;
+  if (state.mode === 'won') return;
+  const remaining = Math.max(0, HORROR_GRACE_MS - (Date.now() - state.warningStart));
+  const secs = Math.ceil(remaining / 1000);
+  const secsStr = '0:' + (secs < 10 ? '0' : '') + secs;
+
+  // Top-of-screen countdown strip
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.78)';
+  ctx.fillRect(0, 0, CANVAS_W, 28);
+  ctx.fillStyle = '#ff2a2a';
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 18px "Courier New", monospace';
+  ctx.fillText(secsStr, CANVAS_W / 2, 21);
+
+  // Center jumpscare-style warning, pulsing red
+  const pulse = 0.65 + 0.35 * Math.abs(Math.sin(Date.now() * 0.009));
+  ctx.fillStyle = 'rgba(0, 0, 0, ' + (0.55 * pulse) + ')';
+  ctx.fillRect(0, CANVAS_H / 2 - 56, CANVAS_W, 112);
+  const cr = 255;
+  const cg = Math.floor(40 * (1 - pulse));
+  const cb = Math.floor(40 * (1 - pulse));
+  ctx.fillStyle = 'rgb(' + cr + ',' + cg + ',' + cb + ')';
+  ctx.font = 'bold 24px "Comic Sans MS", cursive';
+  ctx.fillText("You're taking too long!", CANVAS_W / 2, CANVAS_H / 2 - 6);
+  ctx.font = 'bold 17px "Comic Sans MS", cursive';
+  ctx.fillText('Find the exit or hide within 30 seconds!',
+               CANVAS_W / 2, CANVAS_H / 2 + 22);
+
+  ctx.textAlign = 'start';
 }
 
 // ---------- Movement / animation ----------
@@ -860,11 +928,15 @@ function exitHallway() {
 
   // Resume music from where it left off — pause() preserved the
   // playback position, so play() picks up there. No currentTime
-  // assignment, which is what was forcing the restart.
-  try {
-    const p = bgm.play();
-    if (p && p.catch) p.catch(() => {});
-  } catch (e) {}
+  // assignment, which is what was forcing the restart. Skip
+  // entirely once the horror grace timer has silenced audio for
+  // the rest of the playthrough.
+  if (!state.musicSilenced) {
+    try {
+      const p = bgm.play();
+      if (p && p.catch) p.catch(() => {});
+    } catch (e) {}
+  }
 }
 
 // ---------- Win ----------
@@ -887,6 +959,7 @@ function loop(now) {
     else if (state.keys.has('ArrowLeft'))  tryTurn(true);
     else if (state.keys.has('ArrowRight')) tryTurn(false);
   }
+  tickHorror();
   render();
   rafId = requestAnimationFrame(loop);
 }
@@ -903,6 +976,10 @@ function startGame() {
   state.pAngle = 0;
   state.tileCache.clear();
   state.mode = 'maze';
+  // Reset horror state in case of a replay-without-reload.
+  state.warningTriggered = false;
+  state.warningStart = 0;
+  state.musicSilenced = false;
   // Even the starting corridor is procedurally generated, so the
   // unlucky-roll seal could in theory happen here too.
   ensureCorridorEscape(0, 0);
