@@ -1088,6 +1088,23 @@ function spawnBullet(x, y, vx, vy, opts) {
   enemyBullets.push(b);
 }
 
+// GAPS — fire one matched pair of vertical bullet columns from the
+// canvas edges. Both columns share the same y-stack with the same
+// gap row removed, so they cross the player's column at the same
+// instant with the gap aligned.
+function _gapsFireSet(s) {
+  const speed = s.speeds[s.setIdx];
+  const color = '#80c0ff';
+  const step = 14;
+  const yStart = ARENA.y + 6;
+  const yEnd   = ARENA.y + ARENA.h - 6;
+  for (let y = yStart; y <= yEnd; y += step) {
+    if (Math.abs(y - s.gapCenterY) < s.gapHalf) continue;
+    spawnBullet(-6,           y,  speed, 0, { color });
+    spawnBullet(CANVAS_W + 6, y, -speed, 0, { color });
+  }
+}
+
 function spawnAimed(x, y, tx, ty, speed, opts) {
   const dx = tx - x, dy = ty - y;
   const len = Math.hypot(dx, dy) || 1;
@@ -1730,7 +1747,7 @@ const SOUL_ORDER = ['red', 'blue', 'purple', 'green'];
 
 const PHASE2_POOLS = {
   red:    ['CONTAMINATION_ZONES', 'TOXIC_BUBBLES', 'PRESSURE_VALVE', 'FUME_TRAIL', 'STATIC_FIELD'],
-  blue:   ['ACID_PUDDLES', 'RISING_SMOG', 'DOWNDRAFT', 'GEYSER', 'BOUNCE_PADS'],
+  blue:   ['ACID_PUDDLES', 'RISING_SMOG', 'DOWNDRAFT', 'GAPS', 'BOUNCE_PADS'],
   purple: ['SLUDGE_CRAWLERS', 'WARNING_LANES', 'CONVEYOR_BELT', 'LEAPFROG', 'TOLL_BOOTH'],
   green:  ['CARDINAL_SHOTS', 'RING_OF_FIRE', 'PING_PONG', 'FEINT', 'MACHINE_GUN_ROULETTE'],
 };
@@ -2547,93 +2564,48 @@ Object.assign(ATTACKS, {
   },
 
   // 3 floor warning + erupting columns; horizontal mid-height drift.
-  GEYSER: {
-    name: 'GEYSER',
-    duration: 8.5,
+  // Two vertical bullet columns spawn off-canvas at the same Y
+  // stack with a single shared gap; they travel inward at matched
+  // speed so the gap stays aligned and meets at center. Player just
+  // stays dead-center horizontally and times a jump into the gap.
+  // Five sets per use, accelerating from 1 → 5.
+  GAPS: {
+    name: 'GAPS',
+    duration: 12.0,
     init() {
-      bossAI.state.round = -1;
-      bossAI.state.roundT = 0;
-      bossAI.state.geysers = []; // {x, phase: 'warn'|'erupt', t}
-      bossAI.state.driftT = 0;
+      const s = bossAI.state;
+      s.setIdx = -1;
+      s.cooldownT = 0.7;
+      // Gap centered ~60 px above the floor — well within blue's
+      // ~103 px jump apex. Vertical span is slightly wider than the
+      // player hitbox (17 px) so the timing window is forgiving but
+      // not trivial.
+      s.gapCenterY = ARENA.y + ARENA.h - 60;
+      s.gapHalf = 18;
+      s.speeds = [150, 200, 250, 300, 350];
     },
     update(dt) {
       const s = bossAI.state;
       bossSweep(dt, 0.3);
-      s.roundT += dt;
-      // Begin a new round if needed.
-      if (s.geysers.length === 0 && s.round < 3) {
-        s.round++;
-        s.geysers = [];
-        for (let i = 0; i < 3; i++) {
-          s.geysers.push({
-            x: ARENA.x + 30 + Math.random() * (ARENA.w - 60),
-            phase: 'warn',
-            t: 0,
-          });
-        }
-      }
-      // Update geysers.
-      for (let i = s.geysers.length - 1; i >= 0; i--) {
-        const g = s.geysers[i];
-        g.t += dt;
-        if (g.phase === 'warn' && g.t >= 0.5) {
-          g.phase = 'erupt';
-          g.t = 0;
-          // Spawn a column of bullets all at once.
-          for (let y = ARENA.y + ARENA.h - 8; y > ARENA.y; y -= 14) {
-            spawnBullet(g.x, y, 0, 0, { color: '#aaff44' });
-          }
-        }
-        if (g.phase === 'erupt' && g.t >= 2.0) {
-          // Erupt finished — purge column bullets we spawned.
-          // (They had vy=0; they linger. Clear by proximity.)
-          for (let j = enemyBullets.length - 1; j >= 0; j--) {
-            const b = enemyBullets[j];
-            if (Math.abs(b.x - g.x) < 6 && b.vx === 0 && b.vy === 0) {
-              enemyBullets.splice(j, 1);
-            }
-          }
-          s.geysers.splice(i, 1);
-        }
-      }
-      // Drift bullets — placed just above the floor so a grounded
-      // player must actually jump them. The previous y was at 45%
-      // of the arena height (above the player's jump apex), so the
-      // bullets sailed harmlessly overhead.
-      s.driftT += dt;
-      if (s.driftT >= 0.55) {
-        s.driftT = 0;
-        const fromLeft = Math.random() < 0.5;
-        const yMid = ARENA.y + ARENA.h - 18 + (Math.random() - 0.5) * 6;
-        spawnBullet(
-          fromLeft ? ARENA.x - 6 : ARENA.x + ARENA.w + 6,
-          yMid,
-          (fromLeft ? 1 : -1) * 130 * P2_SPEED,
-          0
-        );
+      s.cooldownT -= dt;
+      if (s.cooldownT <= 0 && s.setIdx < 4) {
+        s.setIdx += 1;
+        _gapsFireSet(s);
+        const speed = s.speeds[s.setIdx];
+        // Wait until the lines have travelled past the player's
+        // column with a small breather, then start the next set.
+        s.cooldownT = (CANVAS_W / 2 + 100) / speed + 0.35;
       }
     },
     draw() {
       const s = bossAI.state;
-      if (!s || !s.geysers) return;
+      if (!s) return;
+      // Faint band telegraph so the player can read the safe height
+      // before the first set arrives.
       ctx.save();
-      for (const g of s.geysers) {
-        if (g.phase === 'warn') {
-          const a = 0.3 + 0.4 * Math.sin(g.t * 20);
-          ctx.fillStyle = 'rgba(180, 255, 80, ' + a.toFixed(2) + ')';
-          ctx.fillRect(g.x - 8, ARENA.y + ARENA.h - 4, 16, 4);
-          // Up arrow telegraph.
-          ctx.strokeStyle = 'rgba(180, 255, 80, 0.85)';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(g.x, ARENA.y + ARENA.h - 6);
-          ctx.lineTo(g.x, ARENA.y + ARENA.h - 26);
-          ctx.moveTo(g.x - 4, ARENA.y + ARENA.h - 22);
-          ctx.lineTo(g.x, ARENA.y + ARENA.h - 26);
-          ctx.lineTo(g.x + 4, ARENA.y + ARENA.h - 22);
-          ctx.stroke();
-        }
-      }
+      ctx.fillStyle = 'rgba(120, 200, 255, 0.10)';
+      ctx.fillRect(ARENA.x, s.gapCenterY - s.gapHalf,
+                   ARENA.w, s.gapHalf * 2);
       ctx.restore();
     },
   },
@@ -3691,7 +3663,7 @@ const PHASE3_MODIFIERS = ['BOX_CRUSH', 'TEXT_BOX_ASSAULT', 'INVERSION'];
 
 const FINAL_ATTACK_SEQUENCE = [
   { soul: 'red',    a1: 'CONTAMINATION_ZONES', a2: 'SMOG_SPIRAL' },
-  { soul: 'blue',   a1: 'ACID_RAIN',           a2: 'GEYSER' },
+  { soul: 'blue',   a1: 'ACID_RAIN',           a2: 'GAPS' },
   { soul: 'purple', a1: 'TOLL_BOOTH',          a2: 'CONVEYOR_BELT' },
   { soul: 'green',  a1: 'CHEMICAL_RUNOFF',     a2: 'CARDINAL_SHOTS' },
 ];
@@ -4530,7 +4502,7 @@ function checkCollisions() {
   // hit and i-frames are set, any other bullet that connects this
   // frame is still consumed (so it doesn't linger to hit again on
   // the next frame) but does not deal additional damage. Without
-  // this, a multi-bullet attack like GEYSER's column could connect
+  // this, a multi-bullet attack with a packed column could connect
   // 3+ bullets in the same frame and one-shot a full-HP player.
   if (!player.invincible && !game.over) {
     const half = PLAYER_HITBOX / 2;
