@@ -3669,9 +3669,10 @@ const PHASE3_COMBOS = [
   { id: 'COMBO_8', soul: 'red',    a1: 'AIMED_BARRAGE',   a2: 'CONTAMINATION_ZONES' },
 ];
 
-// ERROR_FLOOD was removed — the popup spam combined with concurrent
-// combo attacks left no readable space on screen.
-const PHASE3_MODIFIERS = ['BOX_CRUSH', 'TEXT_BOX_ASSAULT', 'INVERSION'];
+// ERROR_FLOOD and TEXT_BOX_ASSAULT were removed — both stacked on
+// top of an active combo and produced effectively unavoidable
+// damage (6+ HP per cycle on the bottom-up rain).
+const PHASE3_MODIFIERS = ['BOX_CRUSH', 'INVERSION'];
 // SOUL_SCRAMBLE is held back as a one-shot ambush (handled separately).
 
 const FINAL_ATTACK_SEQUENCE = [
