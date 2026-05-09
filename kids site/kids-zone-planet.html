@@ -917,6 +917,14 @@ function updatePlayerBlue(dt) {
   if (keys.has('ArrowRight')) dx += 1;
   player.x += dx * BLUE_HORIZ_SPEED * dt;
 
+  // Variable jump height (Undertale-style): full launch on press,
+  // but releasing UP while still rising clips the upward velocity so
+  // a tap gives a short hop and a hold reaches full apex.
+  const jumpHeld = keys.has('ArrowUp');
+  if (player.jumpHeld && !jumpHeld && player.vy < 0) {
+    player.vy *= 0.35;
+  }
+
   // Gravity (boss attacks can intensify it via gravityMul/jumpMul).
   const gMul = (typeof bossAI !== 'undefined' && bossAI.gravityMul) || 1;
   const jMul = (typeof bossAI !== 'undefined' && bossAI.jumpMul) || 1;
@@ -926,14 +934,19 @@ function updatePlayerBlue(dt) {
   player.y += player.vy * dt;
 
   // Jump (UP) — grounded check uses the (possibly-rising) floor Y.
+  // Only fires on a fresh press so holding doesn't auto-bunny-hop
+  // and the release-cut above can actually shorten the jump.
   const groundY = (typeof bossAI !== 'undefined' && bossAI.blueFloorY)
     ? bossAI.blueFloorY - PLAYER_HITBOX / 2
     : ARENA.y + ARENA.h - PLAYER_HITBOX / 2;
   if (player.y >= groundY) {
     player.y = groundY;
     player.vy = 0;
-    if (keys.has('ArrowUp')) player.vy = BLUE_JUMP_VEL * jMul;
+    if (jumpHeld && !player.jumpHeld) {
+      player.vy = BLUE_JUMP_VEL * jMul;
+    }
   }
+  player.jumpHeld = jumpHeld;
   clampPlayerToArena();
 }
 
